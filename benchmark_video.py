@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import statistics
 import time
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -12,7 +13,12 @@ try:
     import cv2
 except ModuleNotFoundError:
     cv2 = None
-from video_pipeline import LatestFrameBuffer, build_light_bounds, sample_light_bytes
+from video_pipeline import (
+    LatestFrameBuffer,
+    build_light_bounds,
+    sample_light_bytes,
+    send_stream_message,
+)
 
 
 WIDTH = 960
@@ -141,6 +147,33 @@ def verify_latest_frame_sync() -> tuple[int, int, int]:
     return len(analyzed_generations), dropped, duplicates
 
 
+def verify_flush_order() -> int:
+    """Verify packets flush before the pacing sleep adds the next-frame delay."""
+    events = []
+
+    class RecordingStdin:
+        def write(self, text):
+            events.append(("write", text))
+
+        def flush(self):
+            events.append(("flush",))
+
+    proc = SimpleNamespace(stdin=RecordingStdin())
+    send_stream_message(
+        proc,
+        b"HueStream",
+        lambda delay: events.append(("sleep", delay)),
+    )
+    expected = [
+        ("write", "HueStream"),
+        ("flush",),
+        ("sleep", 0.0167),
+    ]
+    if events != expected:
+        raise RuntimeError(f"unexpected stream send order: {events}")
+    return int(events.index(("flush",)) < events.index(("sleep", 0.0167)))
+
+
 def measure_pair(
     candidate,
     baseline,
@@ -181,6 +214,7 @@ def measure_pair(
 
 def run() -> None:
     analyzed_frames, dropped_frames, duplicate_frames = verify_latest_frame_sync()
+    flush_before_sleep = verify_flush_order()
     rng = np.random.default_rng(SEED)
     frames = rng.integers(
         0,
@@ -230,6 +264,7 @@ def run() -> None:
     throughput_fps = FRAME_COUNT / candidate_seconds
     speedup = baseline_seconds / candidate_seconds
     print("EQUIVALENCE baseline=candidate")
+    print(f"METRIC stream_flush_before_sleep={flush_before_sleep}")
     print(f"METRIC latest_frames_analyzed={analyzed_frames}")
     print(f"METRIC superseded_frames_dropped={dropped_frames}")
     print(f"METRIC duplicate_frame_generations={duplicate_frames}")

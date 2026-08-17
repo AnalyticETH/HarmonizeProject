@@ -29,7 +29,11 @@ import subprocess
 import threading
 import fileinput
 import numpy as np
-from video_pipeline import LatestFrameBuffer, sample_light_bytes
+from video_pipeline import (
+    LatestFrameBuffer,
+    sample_light_bytes,
+    send_stream_message,
+)
 import cv2
 import re
 
@@ -412,9 +416,7 @@ def buffer_to_light(proc): #Potentially thread this into 2 processes?
                 message += bytes(chr(int(i)), 'utf-8') + rgb_bytes[i]
  
         bufferlock.release()
-        proc.stdin.write(message.decode('utf-8','ignore'))
-        time.sleep(.0167) #0.01 to 0.02 (slightly under 100 or 50 messages per sec // or (.0167 = ~60))
-        proc.stdin.flush()
+        send_stream_message(proc, message, time.sleep)
         #verbose('Wrote message and flushed. Briefly waiting') #This will verbose after every send, spamming the console.
 
 ######################################################

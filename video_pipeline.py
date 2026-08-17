@@ -87,5 +87,12 @@ def sample_light_bytes(
     return encoded
 
 
+def send_stream_message(proc, message: bytes, sleep_fn: Callable[[float], None]) -> None:
+    """Flush each Hue packet before pacing the next packet."""
+    proc.stdin.write(message.decode("utf-8", "ignore"))
+    proc.stdin.flush()
+    sleep_fn(0.0167)
+
+
 
 
