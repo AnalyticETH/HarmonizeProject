@@ -29,6 +29,7 @@ import subprocess
 import threading
 import fileinput
 import numpy as np
+from video_pipeline import encode_light_bytes, sample_light_colors
 import cv2
 import re
 
@@ -322,11 +323,8 @@ def averageimage():
 
 # Constantly sets RGB values by location via taking average of nearby pixels
     while not stopped:
-        for x, bds in bounds.items():
-            area[x] = rgbframe[bds[0]:bds[1], bds[2]:bds[3], :]
-            rgb[x] = cv2.mean(area[x])
-        for x, c in rgb.items():
-            rgb_bytes[x] = bytearray([int(c[0]/2), int(c[0]/2), int(c[1]/2), int(c[1]/2), int(c[2]/2), int(c[2]/2),] )
+        rgb = sample_light_colors(rgbframe, bounds, cv2.mean)
+        rgb_bytes = encode_light_bytes(rgb)
             
 ######################################################
 ############ Video Capture Setup #####################
