@@ -39,32 +39,21 @@ def build_light_bounds(
     return bounds
 
 
-def sample_light_colors(
+def sample_light_bytes(
     frame: np.ndarray,
     bounds: Bounds,
     mean_fn: MeanFunction,
-) -> dict[str, Sequence[float]]:
-    """Average each configured light region from one RGB frame."""
-    colors: dict[str, Sequence[float]] = {}
-    for light, (top, bottom, left, right) in bounds.items():
-        colors[light] = mean_fn(frame[top:bottom, left:right, :])
-    return colors
-
-
-def encode_light_bytes(
-    colors: Mapping[str, Sequence[float]],
 ) -> dict[str, bytearray]:
-    """Convert averaged RGB values to the Hue streaming payload format."""
+    """Average each light region and encode its Hue payload in one pass."""
     encoded: dict[str, bytearray] = {}
-    for light, color in colors.items():
-        encoded[light] = bytearray(
-            (
-                int(color[0] / 2),
-                int(color[0] / 2),
-                int(color[1] / 2),
-                int(color[1] / 2),
-                int(color[2] / 2),
-                int(color[2] / 2),
-            )
-        )
+    for light, (top, bottom, left, right) in bounds.items():
+        color = mean_fn(frame[top:bottom, left:right, :])
+        red = int(color[0] / 2)
+        green = int(color[1] / 2)
+        blue = int(color[2] / 2)
+        encoded[light] = bytearray((red, red, green, green, blue, blue))
     return encoded
+
+
+
+

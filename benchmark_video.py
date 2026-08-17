@@ -13,11 +13,7 @@ try:
 except ModuleNotFoundError:
     cv2 = None
 
-from video_pipeline import (
-    build_light_bounds,
-    encode_light_bytes,
-    sample_light_colors,
-)
+from video_pipeline import build_light_bounds, sample_light_bytes
 
 
 WIDTH = 960
@@ -81,6 +77,12 @@ def baseline_encode_light_bytes(colors):
     return encoded
 
 
+def baseline_process(frame, bounds, mean_fn):
+    return baseline_encode_light_bytes(
+        baseline_sample_light_colors(frame, bounds, mean_fn)
+    )
+
+
 def production_mean(region: np.ndarray):
     # OpenCV is the production implementation. NumPy is an exact three-channel
     # compatibility path for this hardware-only benchmark environment.
@@ -92,32 +94,20 @@ def payload_checksum(payload) -> int:
 
 
 def assert_equivalent(frame, bounds, mean_fn) -> None:
-    baseline_colors = baseline_sample_light_colors(frame, bounds, mean_fn)
-    candidate_colors = sample_light_colors(frame, bounds, mean_fn)
-    for light in bounds:
-        if not np.allclose(
-            np.asarray(baseline_colors[light]),
-            np.asarray(candidate_colors[light]),
-            rtol=0.0,
-            atol=0.0,
-        ):
-            raise RuntimeError(f"sampling output mismatch for light {light}")
-
-    baseline_payload = baseline_encode_light_bytes(baseline_colors)
-    candidate_payload = encode_light_bytes(candidate_colors)
+    baseline_payload = baseline_process(frame, bounds, mean_fn)
+    candidate_payload = sample_light_bytes(frame, bounds, mean_fn)
     if baseline_payload != candidate_payload:
-        raise RuntimeError("encoded payload differs from baseline implementation")
+        raise RuntimeError("candidate payload differs from baseline implementation")
 
 
-def measure(analyzer, encoder, frames, bounds, mean_fn) -> tuple[float, list[int]]:
+def measure(processor, frames, bounds, mean_fn) -> tuple[float, list[int]]:
     elapsed: list[float] = []
     checksums: list[int] = []
     for _ in range(REPEATS):
         checksum = 0
         started = time.perf_counter_ns()
         for frame in frames:
-            colors = analyzer(frame, bounds, mean_fn)
-            payload = encoder(colors)
+            payload = processor(frame, bounds, mean_fn)
             checksum = (checksum + payload_checksum(payload)) & 0xFFFFFFFF
         elapsed.append((time.perf_counter_ns() - started) / 1_000_000_000)
         checksums.append(checksum)
@@ -141,21 +131,18 @@ def run() -> None:
         assert_equivalent(frame, bounds, mean_fn)
 
     # Warm up NumPy/OpenCV dispatch and page in the fixture before timing.
-    warmup_colors = sample_light_colors(frames[0], bounds, mean_fn)
-    warmup_payload = encode_light_bytes(warmup_colors)
+    warmup_payload = sample_light_bytes(frames[0], bounds, mean_fn)
     if not warmup_payload:
         raise RuntimeError("benchmark produced an empty payload")
 
     candidate_seconds, candidate_checksums = measure(
-        sample_light_colors,
-        encode_light_bytes,
+        sample_light_bytes,
         frames,
         bounds,
         mean_fn,
     )
     baseline_seconds, baseline_checksums = measure(
-        baseline_sample_light_colors,
-        baseline_encode_light_bytes,
+        baseline_process,
         frames,
         bounds,
         mean_fn,
