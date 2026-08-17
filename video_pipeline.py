@@ -119,8 +119,8 @@ def build_stream_message(
 
 
 def send_stream_message(proc, message: bytes, sleep_fn: Callable[[float], None]) -> None:
-    """Flush each Hue packet before pacing the next packet."""
-    proc.stdin.write(message.decode("utf-8", "ignore"))
+    """Flush each binary Hue packet before pacing the next packet."""
+    proc.stdin.write(message)
     proc.stdin.flush()
     sleep_fn(0.0167)
 

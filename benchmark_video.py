@@ -218,7 +218,7 @@ def verify_flush_order() -> int:
         lambda delay: events.append(("sleep", delay)),
     )
     expected = [
-        ("write", "HueStream"),
+        ("write", b"HueStream"),
         ("flush",),
         ("sleep", 0.0167),
     ]

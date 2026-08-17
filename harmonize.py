@@ -455,7 +455,7 @@ try:
             time.sleep(0.50) # wait sufficiently until rgb_bytes is defined from above thread
             verbose("Opening an SSL packet stream to lights on network...")
             cmd = ["openssl","s_client","-dtls1_2","-cipher","PSK-AES128-GCM-SHA256","-psk_identity",hue_app_id,"-psk",clientdata['clientkey'], "-connect", hueip+":2100"]
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
             t = threading.Thread(target=buffer_to_light, args=(proc,))
             t.start()
             threads.append(t)
