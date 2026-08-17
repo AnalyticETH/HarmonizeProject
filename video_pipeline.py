@@ -87,6 +87,22 @@ def sample_light_bytes(
     return encoded
 
 
+def build_stream_message(
+    entertainment_id: str,
+    rgb_bytes: Mapping[str, bytearray],
+) -> bytes:
+    """Assemble a Hue packet without repeated immutable-byte concatenation."""
+    message = bytearray(
+        b"HueStream"
+        + b"\2\0\0\0\0\0\0"
+        + entertainment_id.encode("utf-8")
+    )
+    for light, payload in rgb_bytes.items():
+        message.append(int(light))
+        message.extend(payload)
+    return bytes(message)
+
+
 def send_stream_message(proc, message: bytes, sleep_fn: Callable[[float], None]) -> None:
     """Flush each Hue packet before pacing the next packet."""
     proc.stdin.write(message.decode("utf-8", "ignore"))

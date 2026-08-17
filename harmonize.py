@@ -31,6 +31,7 @@ import fileinput
 import numpy as np
 from video_pipeline import (
     LatestFrameBuffer,
+    build_stream_message,
     sample_light_bytes,
     send_stream_message,
 )
@@ -406,14 +407,12 @@ def buffer_to_light(proc): #Potentially thread this into 2 processes?
     while not stopped:
         bufferlock.acquire()
         
-        message = bytes('HueStream','utf-8') + b'\2\0\0\0\0\0\0' + bytes(entertainment_id,'utf-8')
-
         if is_single_light:
+            message = bytes('HueStream','utf-8') + b'\2\0\0\0\0\0\0' + bytes(entertainment_id,'utf-8')
             single_light_bytes = bytearray([int(channels[2]/2), int(channels[2]/2), int(channels[1]/2), int(channels[1]/2), int(channels[0]/2), int(channels[0]/2),] ) # channels corrected here from BGR to RGB
             message += bytes(chr(int(1)), 'utf-8') + single_light_bytes
         else:
-            for i in rgb_bytes:
-                message += bytes(chr(int(i)), 'utf-8') + rgb_bytes[i]
+            message = build_stream_message(entertainment_id, rgb_bytes)
  
         bufferlock.release()
         send_stream_message(proc, message, time.sleep)

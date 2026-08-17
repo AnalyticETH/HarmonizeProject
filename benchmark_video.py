@@ -17,6 +17,7 @@ except ModuleNotFoundError:
 from video_pipeline import (
     LatestFrameBuffer,
     build_light_bounds,
+    build_stream_message,
     sample_light_bytes,
     send_stream_message,
 )
@@ -27,6 +28,8 @@ HEIGHT = 540
 FRAME_COUNT = 64
 REPEATS = 5
 SEED = 20260817
+MESSAGE_REPEATS = 10_000
+ENTERTAINMENT_ID = "entertainment-123"
 EXPECTED_CHECKSUM = 387910
 
 # Normalized positions model a 16-channel entertainment area around a display.
@@ -81,6 +84,16 @@ def baseline_encode_light_bytes(colors):
             )
         )
     return encoded
+
+
+def baseline_stream_message(entertainment_id, rgb_bytes):
+    message = bytes("HueStream", "utf-8") + b"\2\0\0\0\0\0\0" + bytes(
+        entertainment_id,
+        "utf-8",
+    )
+    for light, payload in rgb_bytes.items():
+        message += bytes(chr(int(light)), "utf-8") + payload
+    return message
 
 
 def baseline_process(frame, bounds, mean_fn):
@@ -233,6 +246,44 @@ def measure_pair(
     )
 
 
+def measure_stream_pair(entertainment_id, rgb_bytes):
+    candidate_elapsed: list[float] = []
+    baseline_elapsed: list[float] = []
+    candidate_checksums: list[int] = []
+    baseline_checksums: list[int] = []
+    for repeat in range(REPEATS):
+        ordered = (
+            (("candidate", build_stream_message), ("baseline", baseline_stream_message))
+            if repeat % 2 == 0
+            else (("baseline", baseline_stream_message), ("candidate", build_stream_message))
+        )
+        for name, builder in ordered:
+            checksum = 0
+            started = time.perf_counter_ns()
+            for _ in range(MESSAGE_REPEATS):
+                message = builder(entertainment_id, rgb_bytes)
+                checksum = (checksum + message[0] + len(message)) & 0xFFFFFFFF
+            duration = (time.perf_counter_ns() - started) / 1_000_000_000
+            if name == "candidate":
+                candidate_elapsed.append(duration)
+                candidate_checksums.append(checksum)
+            else:
+                baseline_elapsed.append(duration)
+                baseline_checksums.append(checksum)
+
+    candidate_message = build_stream_message(entertainment_id, rgb_bytes)
+    baseline_message = baseline_stream_message(entertainment_id, rgb_bytes)
+    if candidate_message != baseline_message:
+        raise RuntimeError("stream packet differs from baseline implementation")
+    if candidate_checksums != baseline_checksums:
+        raise RuntimeError("stream packet checksum differs from baseline")
+    return (
+        statistics.median(candidate_elapsed) / MESSAGE_REPEATS,
+        statistics.median(baseline_elapsed) / MESSAGE_REPEATS,
+        sum(candidate_message) & 0xFFFFFFFF,
+    )
+
+
 def run() -> None:
     analyzed_frames, dropped_frames, duplicate_frames = verify_latest_frame_sync()
     flush_before_sleep = verify_flush_order()
@@ -255,6 +306,11 @@ def run() -> None:
     warmup_payload = sample_light_bytes(frames[0], bounds, mean_fn)
     if not warmup_payload:
         raise RuntimeError("benchmark produced an empty payload")
+
+    packet_seconds, packet_baseline_seconds, packet_checksum = measure_stream_pair(
+        ENTERTAINMENT_ID,
+        warmup_payload,
+    )
 
     (
         candidate_seconds,
@@ -285,6 +341,11 @@ def run() -> None:
     throughput_fps = FRAME_COUNT / candidate_seconds
     speedup = baseline_seconds / candidate_seconds
     print("EQUIVALENCE baseline=candidate")
+    print(f"METRIC stream_packet_build_us={packet_seconds * 1_000_000:.3f}")
+    print(f"METRIC stream_packet_baseline_us={packet_baseline_seconds * 1_000_000:.3f}")
+    print(
+        f"METRIC stream_packet_speedup={packet_baseline_seconds / packet_seconds:.6f}"
+    )
     print(f"METRIC stream_flush_before_sleep={flush_before_sleep}")
     print(f"METRIC latest_frames_analyzed={analyzed_frames}")
     print(f"METRIC superseded_frames_dropped={dropped_frames}")
@@ -294,6 +355,7 @@ def run() -> None:
     print(f"METRIC baseline_latency_us={baseline_latency_us:.3f}")
     print(f"METRIC speedup_vs_baseline={speedup:.6f}")
     print(f"CHECKSUM {candidate_checksums[0]}")
+    print(f"PACKET_CHECKSUM {packet_checksum}")
 
 
 if __name__ == "__main__":
