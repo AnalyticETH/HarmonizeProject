@@ -409,10 +409,10 @@ def run() -> None:
     )
 
     (
-        candidate_seconds,
-        candidate_checksums,
-        baseline_seconds,
-        baseline_checksums,
+        rgb_seconds,
+        rgb_candidate_checksums,
+        rgb_baseline_seconds,
+        rgb_baseline_checksums,
     ) = measure_pair(
         sample_light_bytes,
         baseline_process,
@@ -433,30 +433,37 @@ def run() -> None:
         mean_fn,
     )
 
-    if len(set(candidate_checksums)) != 1 or len(set(baseline_checksums)) != 1:
+    if len(set(rgb_candidate_checksums)) != 1 or len(set(rgb_baseline_checksums)) != 1:
         raise RuntimeError(
-            f"non-deterministic benchmark output: {candidate_checksums} / {baseline_checksums}"
+            f"non-deterministic RGB output: {rgb_candidate_checksums} / {rgb_baseline_checksums}"
         )
-    if candidate_checksums != baseline_checksums:
-        raise RuntimeError("candidate checksum differs from baseline")
+    if rgb_candidate_checksums != rgb_baseline_checksums:
+        raise RuntimeError("RGB candidate checksum differs from baseline")
     if len(set(bgr_candidate_checksums)) != 1 or len(set(bgr_baseline_checksums)) != 1:
         raise RuntimeError(
             f"non-deterministic BGR output: {bgr_candidate_checksums} / {bgr_baseline_checksums}"
         )
     if bgr_candidate_checksums != bgr_baseline_checksums:
         raise RuntimeError("BGR candidate checksum differs from baseline")
-    if candidate_checksums[0] != EXPECTED_CHECKSUM:
+    if rgb_candidate_checksums[0] != EXPECTED_CHECKSUM:
         raise RuntimeError(
-            f"fixture checksum changed: expected {EXPECTED_CHECKSUM}, got {candidate_checksums[0]}"
+            f"fixture checksum changed: expected {EXPECTED_CHECKSUM}, got {rgb_candidate_checksums[0]}"
+        )
+    if bgr_candidate_checksums[0] != EXPECTED_CHECKSUM:
+        raise RuntimeError(
+            f"BGR fixture checksum changed: expected {EXPECTED_CHECKSUM}, got {bgr_candidate_checksums[0]}"
         )
 
-    latency_us = candidate_seconds * 1_000_000 / FRAME_COUNT
-    baseline_latency_us = baseline_seconds * 1_000_000 / FRAME_COUNT
-    throughput_fps = FRAME_COUNT / candidate_seconds
-    speedup = baseline_seconds / candidate_seconds
-    bgr_latency_us = bgr_seconds * 1_000_000 / FRAME_COUNT
-    bgr_baseline_latency_us = bgr_baseline_seconds * 1_000_000 / FRAME_COUNT
-    bgr_speedup = bgr_baseline_seconds / bgr_seconds
+    latency_us = bgr_seconds * 1_000_000 / FRAME_COUNT
+    baseline_latency_us = bgr_baseline_seconds * 1_000_000 / FRAME_COUNT
+    throughput_fps = FRAME_COUNT / bgr_seconds
+    speedup = bgr_baseline_seconds / bgr_seconds
+    rgb_latency_us = rgb_seconds * 1_000_000 / FRAME_COUNT
+    rgb_baseline_latency_us = rgb_baseline_seconds * 1_000_000 / FRAME_COUNT
+    rgb_speedup = rgb_baseline_seconds / rgb_seconds
+    bgr_latency_us = latency_us
+    bgr_baseline_latency_us = baseline_latency_us
+    bgr_speedup = speedup
     print("EQUIVALENCE baseline=candidate")
     print(f"METRIC brightness_adjust_us={brightness_seconds * 1_000_000:.3f}")
     print(
@@ -473,6 +480,9 @@ def run() -> None:
     print(f"METRIC bgr_latency_us={bgr_latency_us:.3f}")
     print(f"METRIC bgr_baseline_latency_us={bgr_baseline_latency_us:.3f}")
     print(f"METRIC bgr_speedup={bgr_speedup:.6f}")
+    print(f"METRIC rgb_latency_us={rgb_latency_us:.3f}")
+    print(f"METRIC rgb_baseline_latency_us={rgb_baseline_latency_us:.3f}")
+    print(f"METRIC rgb_speedup={rgb_speedup:.6f}")
     print(f"METRIC stream_flush_before_sleep={flush_before_sleep}")
     print(f"METRIC latest_frames_analyzed={analyzed_frames}")
     print(f"METRIC superseded_frames_dropped={dropped_frames}")
@@ -481,7 +491,7 @@ def run() -> None:
     print(f"METRIC video_throughput_fps={throughput_fps:.3f}")
     print(f"METRIC baseline_latency_us={baseline_latency_us:.3f}")
     print(f"METRIC speedup_vs_baseline={speedup:.6f}")
-    print(f"CHECKSUM {candidate_checksums[0]}")
+    print(f"CHECKSUM {bgr_candidate_checksums[0]}")
     print(f"PACKET_CHECKSUM {packet_checksum}")
 
 
