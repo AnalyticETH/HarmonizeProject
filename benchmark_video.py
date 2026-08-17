@@ -15,6 +15,7 @@ try:
 except ModuleNotFoundError:
     cv2 = None
 from video_pipeline import (
+    BGR_CHANNEL_ORDER,
     LatestFrameBuffer,
     adjust_value_channel,
     build_light_bounds,
@@ -119,6 +120,15 @@ def baseline_process(frame, bounds, mean_fn):
     return baseline_encode_light_bytes(
         baseline_sample_light_colors(frame, bounds, mean_fn)
     )
+
+
+def baseline_bgr_process(frame, bounds, mean_fn):
+    rgb_frame = frame[:, :, ::-1].copy()
+    return baseline_process(rgb_frame, bounds, mean_fn)
+
+
+def candidate_bgr_process(frame, bounds, mean_fn):
+    return sample_light_bytes(frame, bounds, mean_fn, BGR_CHANNEL_ORDER)
 
 
 def production_mean(region: np.ndarray):
@@ -382,6 +392,11 @@ def run() -> None:
     mean_fn = production_mean
     for frame in frames[:4]:
         assert_equivalent(frame, bounds, mean_fn)
+    for frame in frames[:4]:
+        baseline_bgr = baseline_bgr_process(frame, bounds, mean_fn)
+        candidate_bgr = candidate_bgr_process(frame, bounds, mean_fn)
+        if baseline_bgr != candidate_bgr:
+            raise RuntimeError("BGR sampling output differs from baseline")
 
     # Warm up NumPy/OpenCV dispatch and page in the fixture before timing.
     warmup_payload = sample_light_bytes(frames[0], bounds, mean_fn)
@@ -405,6 +420,18 @@ def run() -> None:
         bounds,
         mean_fn,
     )
+    (
+        bgr_seconds,
+        bgr_candidate_checksums,
+        bgr_baseline_seconds,
+        bgr_baseline_checksums,
+    ) = measure_pair(
+        candidate_bgr_process,
+        baseline_bgr_process,
+        frames,
+        bounds,
+        mean_fn,
+    )
 
     if len(set(candidate_checksums)) != 1 or len(set(baseline_checksums)) != 1:
         raise RuntimeError(
@@ -412,6 +439,12 @@ def run() -> None:
         )
     if candidate_checksums != baseline_checksums:
         raise RuntimeError("candidate checksum differs from baseline")
+    if len(set(bgr_candidate_checksums)) != 1 or len(set(bgr_baseline_checksums)) != 1:
+        raise RuntimeError(
+            f"non-deterministic BGR output: {bgr_candidate_checksums} / {bgr_baseline_checksums}"
+        )
+    if bgr_candidate_checksums != bgr_baseline_checksums:
+        raise RuntimeError("BGR candidate checksum differs from baseline")
     if candidate_checksums[0] != EXPECTED_CHECKSUM:
         raise RuntimeError(
             f"fixture checksum changed: expected {EXPECTED_CHECKSUM}, got {candidate_checksums[0]}"
@@ -421,6 +454,9 @@ def run() -> None:
     baseline_latency_us = baseline_seconds * 1_000_000 / FRAME_COUNT
     throughput_fps = FRAME_COUNT / candidate_seconds
     speedup = baseline_seconds / candidate_seconds
+    bgr_latency_us = bgr_seconds * 1_000_000 / FRAME_COUNT
+    bgr_baseline_latency_us = bgr_baseline_seconds * 1_000_000 / FRAME_COUNT
+    bgr_speedup = bgr_baseline_seconds / bgr_seconds
     print("EQUIVALENCE baseline=candidate")
     print(f"METRIC brightness_adjust_us={brightness_seconds * 1_000_000:.3f}")
     print(
@@ -434,6 +470,9 @@ def run() -> None:
     print(
         f"METRIC stream_packet_speedup={packet_baseline_seconds / packet_seconds:.6f}"
     )
+    print(f"METRIC bgr_latency_us={bgr_latency_us:.3f}")
+    print(f"METRIC bgr_baseline_latency_us={bgr_baseline_latency_us:.3f}")
+    print(f"METRIC bgr_speedup={bgr_speedup:.6f}")
     print(f"METRIC stream_flush_before_sleep={flush_before_sleep}")
     print(f"METRIC latest_frames_analyzed={analyzed_frames}")
     print(f"METRIC superseded_frames_dropped={dropped_frames}")

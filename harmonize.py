@@ -30,6 +30,7 @@ import threading
 import fileinput
 import numpy as np
 from video_pipeline import (
+    BGR_CHANNEL_ORDER,
     LatestFrameBuffer,
     adjust_value_channel,
     build_stream_message,
@@ -333,7 +334,12 @@ def averageimage():
         if next_frame is None:
             break
         last_generation, frame = next_frame
-        rgb_bytes = sample_light_bytes(frame, bounds, cv2.mean)
+        rgb_bytes = sample_light_bytes(
+            frame,
+            bounds,
+            cv2.mean,
+            BGR_CHANNEL_ORDER,
+        )
 ######################################################
 ############ Video Capture Setup #####################
 ######################################################
@@ -376,8 +382,7 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
                 channels = cv2.mean(bgrframe)
             else:
                 bgrframe = adjust_brightness(bgrframe,commandlineargs.light_brightness)
-                rgbframe = cv2.cvtColor(bgrframe, cv2.COLOR_BGR2RGB) #corrects BGR to RGB
-                frame_buffer.publish(rgbframe)
+                frame_buffer.publish(bgrframe)
         else:
             print("WARNING: Unable to read frame from video stream")
             time.sleep(1)

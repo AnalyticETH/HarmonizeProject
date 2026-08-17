@@ -14,6 +14,8 @@ import numpy as np
 
 MeanFunction = Callable[[np.ndarray], Sequence[float]]
 Bounds = Mapping[str, tuple[int, int, int, int]]
+RGB_CHANNEL_ORDER = (0, 1, 2)
+BGR_CHANNEL_ORDER = (2, 1, 0)
 
 
 @lru_cache(maxsize=256)
@@ -90,14 +92,15 @@ def sample_light_bytes(
     frame: np.ndarray,
     bounds: Bounds,
     mean_fn: MeanFunction,
+    channel_order: tuple[int, int, int] = RGB_CHANNEL_ORDER,
 ) -> dict[str, bytes]:
-    """Average each light region and encode its Hue payload in one pass."""
+    """Average regions and encode Hue bytes in the requested channel order."""
     encoded: dict[str, bytes] = {}
     for light, (top, bottom, left, right) in bounds.items():
         color = mean_fn(frame[top:bottom, left:right, :])
-        red = int(color[0] / 2)
-        green = int(color[1] / 2)
-        blue = int(color[2] / 2)
+        red = int(color[channel_order[0]] / 2)
+        green = int(color[channel_order[1]] / 2)
+        blue = int(color[channel_order[2]] / 2)
         encoded[light] = bytes((red, red, green, green, blue, blue))
     return encoded
 
