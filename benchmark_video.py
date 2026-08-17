@@ -16,6 +16,7 @@ except ModuleNotFoundError:
     cv2 = None
 from video_pipeline import (
     LatestFrameBuffer,
+    adjust_value_channel,
     build_light_bounds,
     build_stream_message,
     sample_light_bytes,
@@ -31,6 +32,9 @@ SEED = 20260817
 MESSAGE_REPEATS = 10_000
 ENTERTAINMENT_ID = "entertainment-123"
 EXPECTED_CHECKSUM = 387910
+BRIGHTNESS_VALUE = 30
+BRIGHTNESS_FRAME_COUNT = 16
+BRIGHTNESS_REPEATS = 5
 
 # Normalized positions model a 16-channel entertainment area around a display.
 LIGHT_POSITIONS = {
@@ -94,6 +98,21 @@ def baseline_stream_message(entertainment_id, rgb_bytes):
     for light, payload in rgb_bytes.items():
         message += bytes(chr(int(light)), "utf-8") + payload
     return message
+
+
+def baseline_adjust_value_channel(hsv, value):
+    """Preserve the split/merge brightness implementation."""
+    h = hsv[:, :, 0].copy()
+    s = hsv[:, :, 1].copy()
+    v = hsv[:, :, 2].copy()
+    limit = 255 - value
+    v[v > limit] = 255
+    v[v <= limit] += value
+    return np.stack((h, s, v), axis=2)
+
+
+def candidate_adjust_value_channel(hsv, value):
+    return adjust_value_channel(hsv.copy(), value)
 
 
 def baseline_process(frame, bounds, mean_fn):
@@ -284,6 +303,44 @@ def measure_stream_pair(entertainment_id, rgb_bytes):
     )
 
 
+def measure_brightness_pair(frames, value):
+    candidate_elapsed: list[float] = []
+    baseline_elapsed: list[float] = []
+    candidate_checksums: list[int] = []
+    baseline_checksums: list[int] = []
+    for repeat in range(BRIGHTNESS_REPEATS):
+        ordered = (
+            (
+                ("candidate", candidate_adjust_value_channel),
+                ("baseline", baseline_adjust_value_channel),
+            )
+            if repeat % 2 == 0
+            else (
+                ("baseline", baseline_adjust_value_channel),
+                ("candidate", candidate_adjust_value_channel),
+            )
+        )
+        for name, adjuster in ordered:
+            checksum = 0
+            started = time.perf_counter_ns()
+            for frame in frames:
+                output = adjuster(frame, value)
+                checksum = (checksum + int(output[0, 0, 2])) & 0xFFFFFFFF
+            duration = (time.perf_counter_ns() - started) / 1_000_000_000
+            if name == "candidate":
+                candidate_elapsed.append(duration)
+                candidate_checksums.append(checksum)
+            else:
+                baseline_elapsed.append(duration)
+                baseline_checksums.append(checksum)
+    if candidate_checksums != baseline_checksums:
+        raise RuntimeError("brightness output checksum differs from baseline")
+    return (
+        statistics.median(candidate_elapsed) / len(frames),
+        statistics.median(baseline_elapsed) / len(frames),
+    )
+
+
 def run() -> None:
     analyzed_frames, dropped_frames, duplicate_frames = verify_latest_frame_sync()
     flush_before_sleep = verify_flush_order()
@@ -293,6 +350,22 @@ def run() -> None:
         256,
         size=(FRAME_COUNT, HEIGHT, WIDTH, 3),
         dtype=np.uint8,
+    )
+    brightness_frames = rng.integers(
+        0,
+        256,
+        size=(BRIGHTNESS_FRAME_COUNT, HEIGHT, WIDTH, 3),
+        dtype=np.uint8,
+    )
+    for frame in brightness_frames[:4]:
+        baseline_output = baseline_adjust_value_channel(frame, BRIGHTNESS_VALUE)
+        candidate_output = candidate_adjust_value_channel(frame, BRIGHTNESS_VALUE)
+        if not np.array_equal(baseline_output, candidate_output):
+            raise RuntimeError("brightness output differs from baseline implementation")
+    candidate_adjust_value_channel(brightness_frames[0], BRIGHTNESS_VALUE)
+    brightness_seconds, brightness_baseline_seconds = measure_brightness_pair(
+        brightness_frames,
+        BRIGHTNESS_VALUE,
     )
     bounds = build_light_bounds(LIGHT_POSITIONS, WIDTH, HEIGHT)
     if any(bottom <= top or right <= left for top, bottom, left, right in bounds.values()):
@@ -341,6 +414,13 @@ def run() -> None:
     throughput_fps = FRAME_COUNT / candidate_seconds
     speedup = baseline_seconds / candidate_seconds
     print("EQUIVALENCE baseline=candidate")
+    print(f"METRIC brightness_adjust_us={brightness_seconds * 1_000_000:.3f}")
+    print(
+        f"METRIC brightness_baseline_us={brightness_baseline_seconds * 1_000_000:.3f}"
+    )
+    print(
+        f"METRIC brightness_speedup={brightness_baseline_seconds / brightness_seconds:.6f}"
+    )
     print(f"METRIC stream_packet_build_us={packet_seconds * 1_000_000:.3f}")
     print(f"METRIC stream_packet_baseline_us={packet_baseline_seconds * 1_000_000:.3f}")
     print(

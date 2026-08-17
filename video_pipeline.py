@@ -6,6 +6,7 @@ while the benchmark can run without a camera, bridge, or OpenCV installation.
 """
 
 from collections.abc import Callable, Mapping, Sequence
+from functools import lru_cache
 from threading import Condition
 
 import numpy as np
@@ -13,6 +14,20 @@ import numpy as np
 
 MeanFunction = Callable[[np.ndarray], Sequence[float]]
 Bounds = Mapping[str, tuple[int, int, int, int]]
+
+
+@lru_cache(maxsize=256)
+def _brightness_lut(value: int) -> np.ndarray:
+    return np.minimum(
+        np.arange(256, dtype=np.uint16) + value,
+        255,
+    ).astype(np.uint8)
+
+
+def adjust_value_channel(hsv: np.ndarray, value: int) -> np.ndarray:
+    """Apply the production saturating brightness shift in place."""
+    hsv[:, :, 2] = _brightness_lut(value)[hsv[:, :, 2]]
+    return hsv
 
 
 class LatestFrameBuffer:
