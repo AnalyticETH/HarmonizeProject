@@ -6,12 +6,44 @@ while the benchmark can run without a camera, bridge, or OpenCV installation.
 """
 
 from collections.abc import Callable, Mapping, Sequence
+from threading import Condition
 
 import numpy as np
 
 
 MeanFunction = Callable[[np.ndarray], Sequence[float]]
 Bounds = Mapping[str, tuple[int, int, int, int]]
+
+
+class LatestFrameBuffer:
+    """Publish frames while allowing consumers to skip superseded generations."""
+
+    def __init__(self) -> None:
+        self._condition = Condition()
+        self._frame: np.ndarray | None = None
+        self._generation = 0
+        self._closed = False
+
+    def publish(self, frame: np.ndarray) -> int:
+        with self._condition:
+            self._frame = frame
+            self._generation += 1
+            generation = self._generation
+            self._condition.notify()
+            return generation
+
+    def next_frame(self, last_generation: int) -> tuple[int, np.ndarray] | None:
+        with self._condition:
+            while not self._closed and self._generation <= last_generation:
+                self._condition.wait()
+            if self._closed:
+                return None
+            return self._generation, self._frame
+
+    def close(self) -> None:
+        with self._condition:
+            self._closed = True
+            self._condition.notify_all()
 
 
 def build_light_bounds(

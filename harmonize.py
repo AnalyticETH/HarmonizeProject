@@ -29,7 +29,7 @@ import subprocess
 import threading
 import fileinput
 import numpy as np
-from video_pipeline import sample_light_bytes
+from video_pipeline import LatestFrameBuffer, sample_light_bytes
 import cv2
 import re
 
@@ -55,6 +55,7 @@ class MyListener(ServiceListener):
         verbose("INFO: Detected %s via mDNS at IP address: %s" % (name, info.parsed_addresses()[0]))
 
 zeroconf = Zeroconf()
+frame_buffer = LatestFrameBuffer()
 listener = MyListener()
 
 parser = argparse.ArgumentParser()
@@ -316,15 +317,17 @@ def averageimage():
         bds = list(map(lambda x: 0 if x < 0 else x, bds))
         bounds[num] = bds
    
-    global rgb,rgb_bytes #array of rgb values, one for each light
-    rgb = {}
+    global rgb_bytes #array of RGB values, one for each light
     rgb_bytes = {}
-    area = {}
+    last_generation = 0
 
-# Constantly sets RGB values by location via taking average of nearby pixels
+# Analyze each newly published frame at most once; superseded frames are skipped.
     while not stopped:
-        rgb_bytes = sample_light_bytes(rgbframe, bounds, cv2.mean)
-            
+        next_frame = frame_buffer.next_frame(last_generation)
+        if next_frame is None:
+            break
+        last_generation, frame = next_frame
+        rgb_bytes = sample_light_bytes(frame, bounds, cv2.mean)
 ######################################################
 ############ Video Capture Setup #####################
 ######################################################
@@ -351,7 +354,7 @@ def init_video_capture():
 
 ######### Now that weve defined our RGB values as bytes, we define how we pull values from the video analyzer output
 def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls W/H
-    global w,h,rgbframe, channels, cap
+    global w,h,channels,cap
     cap = init_video_capture()
     w  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))  # gets video width
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) # gets video height
@@ -368,6 +371,7 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
             else:
                 bgrframe = adjust_brightness(bgrframe,commandlineargs.light_brightness)
                 rgbframe = cv2.cvtColor(bgrframe, cv2.COLOR_BGR2RGB) #corrects BGR to RGB
+                frame_buffer.publish(rgbframe)
         else:
             print("WARNING: Unable to read frame from video stream")
             time.sleep(1)
@@ -468,14 +472,20 @@ try:
                     cap.open(0)
                 if key_input == 'q':
                     stopped = True
+                    frame_buffer.close()
                     for t in threads:
                         t.join()
 
     except Exception as e:
         print(e)
         stopped=True
+        frame_buffer.close()
+        for t in threads:
+            t.join()
+
 
 finally: #Turn off streaming to allow normal function immedietly
+    frame_buffer.close()
     zeroconf.close()
     print("Disabling streaming on Entertainment area...")
     r = requests.put("https://{}/clip/v2/resource/entertainment_configuration/{}".format(hueip,entertainment_id), json={"action":"stop"}, verify=False, headers={"hue-application-key":clientdata['username']})

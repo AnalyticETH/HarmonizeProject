@@ -12,8 +12,7 @@ try:
     import cv2
 except ModuleNotFoundError:
     cv2 = None
-
-from video_pipeline import build_light_bounds, sample_light_bytes
+from video_pipeline import LatestFrameBuffer, build_light_bounds, sample_light_bytes
 
 
 WIDTH = 960
@@ -100,21 +99,88 @@ def assert_equivalent(frame, bounds, mean_fn) -> None:
         raise RuntimeError("candidate payload differs from baseline implementation")
 
 
-def measure(processor, frames, bounds, mean_fn) -> tuple[float, list[int]]:
-    elapsed: list[float] = []
-    checksums: list[int] = []
-    for _ in range(REPEATS):
-        checksum = 0
-        started = time.perf_counter_ns()
-        for frame in frames:
-            payload = processor(frame, bounds, mean_fn)
-            checksum = (checksum + payload_checksum(payload)) & 0xFFFFFFFF
-        elapsed.append((time.perf_counter_ns() - started) / 1_000_000_000)
-        checksums.append(checksum)
-    return statistics.median(elapsed), checksums
+def verify_latest_frame_sync() -> tuple[int, int, int]:
+    """Verify stale generations are dropped and never analyzed twice."""
+    frame_buffer = LatestFrameBuffer()
+    analyzed_generations: list[int] = []
+    last_generation = 0
+
+    for generation in (1, 2, 3):
+        frame_buffer.publish(np.full((2, 2, 3), generation, dtype=np.uint8))
+    result = frame_buffer.next_frame(last_generation)
+    if result is None:
+        raise RuntimeError("latest-frame buffer did not publish the first frame")
+    generation, frame = result
+    if int(frame[0, 0, 0]) != generation or generation != 3:
+        raise RuntimeError("first analysis did not select the latest generation")
+    analyzed_generations.append(generation)
+    last_generation = generation
+
+    for generation in (4, 5):
+        frame_buffer.publish(np.full((2, 2, 3), generation, dtype=np.uint8))
+    result = frame_buffer.next_frame(last_generation)
+    if result is None:
+        raise RuntimeError("latest-frame buffer did not publish the second frame")
+    generation, frame = result
+    if int(frame[0, 0, 0]) != generation or generation != 5:
+        raise RuntimeError("second analysis did not select the latest generation")
+    analyzed_generations.append(generation)
+    last_generation = generation
+
+    duplicates = len(analyzed_generations) - len(set(analyzed_generations))
+    dropped = 5 - len(analyzed_generations)
+    if analyzed_generations != [3, 5] or duplicates != 0 or dropped != 3:
+        raise RuntimeError(
+            f"unexpected synchronization result: analyzed={analyzed_generations}, "
+            f"dropped={dropped}, duplicates={duplicates}"
+        )
+
+    frame_buffer.close()
+    if frame_buffer.next_frame(last_generation) is not None:
+        raise RuntimeError("closed latest-frame buffer returned a frame")
+    return len(analyzed_generations), dropped, duplicates
+
+
+def measure_pair(
+    candidate,
+    baseline,
+    frames,
+    bounds,
+    mean_fn,
+) -> tuple[float, list[int], float, list[int]]:
+    candidate_elapsed: list[float] = []
+    baseline_elapsed: list[float] = []
+    candidate_checksums: list[int] = []
+    baseline_checksums: list[int] = []
+    for repeat in range(REPEATS):
+        ordered = (
+            (("candidate", candidate), ("baseline", baseline))
+            if repeat % 2 == 0
+            else (("baseline", baseline), ("candidate", candidate))
+        )
+        for name, processor in ordered:
+            checksum = 0
+            started = time.perf_counter_ns()
+            for frame in frames:
+                payload = processor(frame, bounds, mean_fn)
+                checksum = (checksum + payload_checksum(payload)) & 0xFFFFFFFF
+            duration = (time.perf_counter_ns() - started) / 1_000_000_000
+            if name == "candidate":
+                candidate_elapsed.append(duration)
+                candidate_checksums.append(checksum)
+            else:
+                baseline_elapsed.append(duration)
+                baseline_checksums.append(checksum)
+    return (
+        statistics.median(candidate_elapsed),
+        candidate_checksums,
+        statistics.median(baseline_elapsed),
+        baseline_checksums,
+    )
 
 
 def run() -> None:
+    analyzed_frames, dropped_frames, duplicate_frames = verify_latest_frame_sync()
     rng = np.random.default_rng(SEED)
     frames = rng.integers(
         0,
@@ -135,13 +201,13 @@ def run() -> None:
     if not warmup_payload:
         raise RuntimeError("benchmark produced an empty payload")
 
-    candidate_seconds, candidate_checksums = measure(
+    (
+        candidate_seconds,
+        candidate_checksums,
+        baseline_seconds,
+        baseline_checksums,
+    ) = measure_pair(
         sample_light_bytes,
-        frames,
-        bounds,
-        mean_fn,
-    )
-    baseline_seconds, baseline_checksums = measure(
         baseline_process,
         frames,
         bounds,
@@ -164,6 +230,9 @@ def run() -> None:
     throughput_fps = FRAME_COUNT / candidate_seconds
     speedup = baseline_seconds / candidate_seconds
     print("EQUIVALENCE baseline=candidate")
+    print(f"METRIC latest_frames_analyzed={analyzed_frames}")
+    print(f"METRIC superseded_frames_dropped={dropped_frames}")
+    print(f"METRIC duplicate_frame_generations={duplicate_frames}")
     print(f"METRIC video_latency_us={latency_us:.3f}")
     print(f"METRIC video_throughput_fps={throughput_fps:.3f}")
     print(f"METRIC baseline_latency_us={baseline_latency_us:.3f}")
