@@ -90,21 +90,21 @@ def sample_light_bytes(
     frame: np.ndarray,
     bounds: Bounds,
     mean_fn: MeanFunction,
-) -> dict[str, bytearray]:
+) -> dict[str, bytes]:
     """Average each light region and encode its Hue payload in one pass."""
-    encoded: dict[str, bytearray] = {}
+    encoded: dict[str, bytes] = {}
     for light, (top, bottom, left, right) in bounds.items():
         color = mean_fn(frame[top:bottom, left:right, :])
         red = int(color[0] / 2)
         green = int(color[1] / 2)
         blue = int(color[2] / 2)
-        encoded[light] = bytearray((red, red, green, green, blue, blue))
+        encoded[light] = bytes((red, red, green, green, blue, blue))
     return encoded
 
 
 def build_stream_message(
     entertainment_id: str,
-    rgb_bytes: Mapping[str, bytearray],
+    rgb_bytes: Mapping[str, bytes],
 ) -> bytes:
     """Assemble a Hue packet without repeated immutable-byte concatenation."""
     message = bytearray(
