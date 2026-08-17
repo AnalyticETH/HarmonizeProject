@@ -367,6 +367,14 @@ def run() -> None:
         brightness_frames,
         BRIGHTNESS_VALUE,
     )
+    for value in (0, 1, BRIGHTNESS_VALUE, 255):
+        for frame in brightness_frames[:2]:
+            baseline_output = baseline_adjust_value_channel(frame, value)
+            candidate_output = candidate_adjust_value_channel(frame, value)
+            if not np.array_equal(baseline_output, candidate_output):
+                raise RuntimeError(
+                    f"brightness output differs for value {value}"
+                )
     bounds = build_light_bounds(LIGHT_POSITIONS, WIDTH, HEIGHT)
     if any(bottom <= top or right <= left for top, bottom, left, right in bounds.values()):
         raise RuntimeError("benchmark fixture contains an empty light region")
