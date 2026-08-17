@@ -6,6 +6,7 @@ from __future__ import annotations
 import statistics
 import time
 from types import SimpleNamespace
+from threading import Event, Thread
 
 import numpy as np
 
@@ -144,6 +145,26 @@ def verify_latest_frame_sync() -> tuple[int, int, int]:
     frame_buffer.close()
     if frame_buffer.next_frame(last_generation) is not None:
         raise RuntimeError("closed latest-frame buffer returned a frame")
+
+    wait_buffer = LatestFrameBuffer()
+    wait_started = Event()
+    wait_result = []
+
+    def wait_for_frame():
+        wait_started.set()
+        wait_result.append(wait_buffer.next_frame(0))
+
+    waiter = Thread(target=wait_for_frame)
+    waiter.start()
+    if not wait_started.wait(timeout=1):
+        raise RuntimeError("latest-frame waiter did not start")
+    wait_buffer.publish(np.full((2, 2, 3), 6, dtype=np.uint8))
+    waiter.join(timeout=1)
+    wait_buffer.close()
+    if waiter.is_alive() or len(wait_result) != 1:
+        raise RuntimeError("latest-frame waiter was not released by publication")
+    if wait_result[0] is None or wait_result[0][0] != 1:
+        raise RuntimeError("latest-frame waiter received the wrong generation")
     return len(analyzed_generations), dropped, duplicates
 
 
