@@ -19,7 +19,8 @@ from video_pipeline import (
     adjust_value_channel,
     build_light_bounds,
     build_stream_message,
-    sample_bgr_light_bytes,
+    prepare_light_regions,
+    sample_bgr_region_bytes,
     sample_light_bytes,
     send_stream_message,
 )
@@ -127,8 +128,8 @@ def baseline_bgr_process(frame, bounds, mean_fn):
     return baseline_process(rgb_frame, bounds, mean_fn)
 
 
-def candidate_bgr_process(frame, bounds, mean_fn):
-    return sample_bgr_light_bytes(frame, bounds, mean_fn)
+def candidate_bgr_process(frame, regions, mean_fn):
+    return sample_bgr_region_bytes(frame, regions, mean_fn)
 
 
 def production_mean(region: np.ndarray):
@@ -396,13 +397,14 @@ def run() -> None:
     if any(bottom <= top or right <= left for top, bottom, left, right in bounds.values()):
         raise RuntimeError("benchmark fixture contains an empty light region")
     prepared_bounds = tuple(bounds.items())
+    prepared_regions = prepare_light_regions(prepared_bounds)
 
     mean_fn = production_mean
     for frame in frames[:4]:
         assert_equivalent(frame, bounds, prepared_bounds, mean_fn)
     for frame in frames[:4]:
         baseline_bgr = baseline_bgr_process(frame, bounds, mean_fn)
-        candidate_bgr = candidate_bgr_process(frame, prepared_bounds, mean_fn)
+        candidate_bgr = candidate_bgr_process(frame, prepared_regions, mean_fn)
         if baseline_bgr != candidate_bgr:
             raise RuntimeError("BGR sampling output differs from baseline")
 
@@ -438,7 +440,7 @@ def run() -> None:
         candidate_bgr_process,
         baseline_bgr_process,
         frames,
-        prepared_bounds,
+        prepared_regions,
         bounds,
         mean_fn,
     )

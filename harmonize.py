@@ -33,7 +33,8 @@ from video_pipeline import (
     LatestFrameBuffer,
     adjust_value_channel,
     build_stream_message,
-    sample_bgr_light_bytes,
+    prepare_light_regions,
+    sample_bgr_region_bytes,
     send_stream_message,
 )
 import cv2
@@ -322,7 +323,7 @@ def averageimage():
         bds = list(map(int, bds))
         bds = list(map(lambda x: 0 if x < 0 else x, bds))
         bounds[num] = bds
-    prepared_bounds = tuple(bounds.items())
+    prepared_regions = prepare_light_regions(tuple(bounds.items()))
    
     global rgb_bytes #array of RGB values, one for each light
     rgb_bytes = {}
@@ -334,9 +335,9 @@ def averageimage():
         if next_frame is None:
             break
         last_generation, frame = next_frame
-        rgb_bytes = sample_bgr_light_bytes(
+        rgb_bytes = sample_bgr_region_bytes(
             frame,
-            prepared_bounds,
+            prepared_regions,
             cv2.mean,
         )
 ######################################################
