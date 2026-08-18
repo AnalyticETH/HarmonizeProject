@@ -117,8 +117,6 @@ def sample_light_bytes(
     return encoded
 
 
-
-
 def sample_bgr_region_bytes(
     frame: np.ndarray,
     regions: PreparedRegions,
