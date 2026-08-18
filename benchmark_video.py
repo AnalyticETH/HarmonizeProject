@@ -319,6 +319,17 @@ def measure_stream_pair(entertainment_id, rgb_bytes):
     baseline_message = baseline_stream_message(entertainment_id, rgb_bytes)
     if candidate_message != baseline_message:
         raise RuntimeError("stream packet differs from baseline implementation")
+    replacement_payload = dict(rgb_bytes)
+    replacement_message = candidate_cache.get(replacement_payload)
+    replacement_baseline = baseline_stream_message(
+        entertainment_id,
+        replacement_payload,
+    )
+    if replacement_message != replacement_baseline:
+        raise RuntimeError("stream packet cache failed to refresh")
+    candidate_message = candidate_cache.get(rgb_bytes)
+    if candidate_message != baseline_message:
+        raise RuntimeError("stream packet cache failed to restore")
     if candidate_checksums != baseline_checksums:
         raise RuntimeError("stream packet checksum differs from baseline")
     return (
