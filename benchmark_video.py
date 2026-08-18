@@ -318,6 +318,10 @@ def measure_stream_pair(entertainment_id, rgb_bytes):
     if candidate_message != baseline_message:
         raise RuntimeError("stream packet differs from baseline implementation")
     replacement_payload = dict(rgb_bytes)
+    first_light = next(iter(replacement_payload))
+    replacement_payload[first_light] = bytes(
+        byte ^ 0xFF for byte in replacement_payload[first_light]
+    )
     replacement_message = candidate_cache.get(replacement_payload)
     replacement_baseline = baseline_stream_message(
         entertainment_id,
@@ -334,6 +338,53 @@ def measure_stream_pair(entertainment_id, rgb_bytes):
         statistics.median(candidate_elapsed) / MESSAGE_REPEATS,
         statistics.median(baseline_elapsed) / MESSAGE_REPEATS,
         sum(candidate_message) & 0xFFFFFFFF,
+    )
+
+
+def measure_stream_miss_pair(
+    entertainment_id,
+    rgb_bytes,
+) -> tuple[float, float]:
+    """Time packet construction when every payload mapping is new."""
+    payloads = tuple(dict(rgb_bytes) for _ in range(MESSAGE_REPEATS))
+    candidate_elapsed: list[float] = []
+    current_elapsed: list[float] = []
+    candidate_checksums: list[int] = []
+    current_checksums: list[int] = []
+    candidate_cache = StreamMessageCache(entertainment_id)
+
+    def cached_builder(_entertainment_id, payload):
+        return candidate_cache.get(payload)
+
+    for repeat in range(REPEATS):
+        ordered = (
+            (("candidate", cached_builder), ("current", build_stream_message))
+            if repeat % 2 == 0
+            else (("current", build_stream_message), ("candidate", cached_builder))
+        )
+        for name, builder in ordered:
+            checksum = 0
+            started = time.perf_counter_ns()
+            for payload in payloads:
+                message = builder(entertainment_id, payload)
+                checksum = (checksum + message[0] + len(message)) & 0xFFFFFFFF
+            duration = (time.perf_counter_ns() - started) / 1_000_000_000
+            if name == "candidate":
+                candidate_elapsed.append(duration)
+                candidate_checksums.append(checksum)
+            else:
+                current_elapsed.append(duration)
+                current_checksums.append(checksum)
+
+    if candidate_checksums != current_checksums:
+        raise RuntimeError("stream packet miss checksum differs from current builder")
+    candidate_message = candidate_cache.get(payloads[-1])
+    current_message = build_stream_message(entertainment_id, payloads[-1])
+    if candidate_message != current_message:
+        raise RuntimeError("stream packet miss output differs from current builder")
+    return (
+        statistics.median(candidate_elapsed) / MESSAGE_REPEATS,
+        statistics.median(current_elapsed) / MESSAGE_REPEATS,
     )
 
 
@@ -433,6 +484,10 @@ def run() -> None:
         ENTERTAINMENT_ID,
         warmup_payload,
     )
+    packet_miss_seconds, packet_miss_current_seconds = measure_stream_miss_pair(
+        ENTERTAINMENT_ID,
+        warmup_payload,
+    )
 
     (
         rgb_seconds,
@@ -504,6 +559,13 @@ def run() -> None:
     print(f"METRIC stream_packet_baseline_us={packet_baseline_seconds * 1_000_000:.3f}")
     print(
         f"METRIC stream_packet_speedup={packet_baseline_seconds / packet_seconds:.6f}"
+    )
+    print(f"METRIC stream_packet_miss_us={packet_miss_seconds * 1_000_000:.3f}")
+    print(
+        f"METRIC stream_packet_miss_current_us={packet_miss_current_seconds * 1_000_000:.3f}"
+    )
+    print(
+        f"METRIC stream_packet_miss_speedup={packet_miss_current_seconds / packet_miss_seconds:.6f}"
     )
     print(f"METRIC bgr_latency_us={bgr_latency_us:.3f}")
     print(f"METRIC bgr_baseline_latency_us={bgr_baseline_latency_us:.3f}")
