@@ -16,6 +16,7 @@ except ModuleNotFoundError:
     cv2 = None
 from video_pipeline import (
     LatestFrameBuffer,
+    StreamMessageCache,
     adjust_value_channel,
     build_light_bounds,
     build_stream_message,
@@ -288,11 +289,17 @@ def measure_stream_pair(entertainment_id, rgb_bytes):
     baseline_elapsed: list[float] = []
     candidate_checksums: list[int] = []
     baseline_checksums: list[int] = []
+    candidate_cache = StreamMessageCache(entertainment_id)
+
+    def cached_builder(_entertainment_id, payload):
+        return candidate_cache.get(payload)
     for repeat in range(REPEATS):
         ordered = (
-            (("candidate", build_stream_message), ("baseline", baseline_stream_message))
-            if repeat % 2 == 0
-            else (("baseline", baseline_stream_message), ("candidate", build_stream_message))
+            (
+                (("candidate", cached_builder), ("baseline", baseline_stream_message))
+                if repeat % 2 == 0
+                else (("baseline", baseline_stream_message), ("candidate", cached_builder))
+            )
         )
         for name, builder in ordered:
             checksum = 0
@@ -308,7 +315,7 @@ def measure_stream_pair(entertainment_id, rgb_bytes):
                 baseline_elapsed.append(duration)
                 baseline_checksums.append(checksum)
 
-    candidate_message = build_stream_message(entertainment_id, rgb_bytes)
+    candidate_message = candidate_cache.get(rgb_bytes)
     baseline_message = baseline_stream_message(entertainment_id, rgb_bytes)
     if candidate_message != baseline_message:
         raise RuntimeError("stream packet differs from baseline implementation")

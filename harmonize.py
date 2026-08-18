@@ -31,8 +31,8 @@ import fileinput
 import numpy as np
 from video_pipeline import (
     LatestFrameBuffer,
+    StreamMessageCache,
     adjust_value_channel,
-    build_stream_message,
     prepare_light_regions,
     sample_bgr_region_bytes,
     send_stream_message,
@@ -403,6 +403,7 @@ def adjust_brightness(raw, value):
 ######### This is where we define our message format and insert our light#s, RGB values, and X,Y,Brightness ##########
 def buffer_to_light(proc): #Potentially thread this into 2 processes?
     time.sleep(1.5) #Hold on so DTLS connection can be made & message format can get defined
+    message_cache = StreamMessageCache(entertainment_id)
     while not stopped:
         bufferlock.acquire()
         
@@ -411,7 +412,7 @@ def buffer_to_light(proc): #Potentially thread this into 2 processes?
             single_light_bytes = bytearray([int(channels[2]/2), int(channels[2]/2), int(channels[1]/2), int(channels[1]/2), int(channels[0]/2), int(channels[0]/2),] ) # channels corrected here from BGR to RGB
             message += bytes(chr(int(1)), 'utf-8') + single_light_bytes
         else:
-            message = build_stream_message(entertainment_id, rgb_bytes)
+            message = message_cache.get(rgb_bytes)
  
         bufferlock.release()
         send_stream_message(proc, message, time.sleep)
