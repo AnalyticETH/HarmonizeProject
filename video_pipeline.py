@@ -117,20 +117,25 @@ def sample_light_bytes(
     return encoded
 
 
+
+
+def _encode_bgr_color(color: Sequence[float]) -> bytes:
+    red = int(color[2] / 2)
+    green = int(color[1] / 2)
+    blue = int(color[0] / 2)
+    return bytes((red, red, green, green, blue, blue))
+
+
 def sample_bgr_region_bytes(
     frame: np.ndarray,
     regions: PreparedRegions,
     mean_fn: MeanFunction,
 ) -> dict[str, bytes]:
     """Average pre-sliced BGR regions and encode their Hue payload as RGB."""
-    encoded: dict[str, bytes] = {}
-    for light, (row_slice, column_slice) in regions:
-        color = mean_fn(frame[row_slice, column_slice])
-        red = int(color[2] / 2)
-        green = int(color[1] / 2)
-        blue = int(color[0] / 2)
-        encoded[light] = bytes((red, red, green, green, blue, blue))
-    return encoded
+    return {
+        light: _encode_bgr_color(mean_fn(frame[row_slice, column_slice]))
+        for light, (row_slice, column_slice) in regions
+    }
 
 
 def build_stream_message(
