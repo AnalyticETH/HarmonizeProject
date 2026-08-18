@@ -447,7 +447,7 @@ try:
             t.start()
             threads.append(t)
             print("Initializing video frame grabber...")
-            time.sleep(commandlineargs.video_wait_time) # wait sufficiently until rgbframe is defined
+            time.sleep(commandlineargs.video_wait_time) # wait sufficiently until first frame is published
             if (commandlineargs.single_light is True) and (len(lights_dict)==1):
                 is_single_light = True
                 print("Enabled optimization for single light source") # averager thread is not utilized
