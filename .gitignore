@@ -5,3 +5,4 @@ __pycache__/
 
 # Local autoresearch harness
 /autoresearch.sh
+/benchmark_video.py
