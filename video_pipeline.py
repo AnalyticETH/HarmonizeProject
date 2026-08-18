@@ -108,6 +108,23 @@ def sample_light_bytes(
     return encoded
 
 
+def sample_bgr_light_bytes(
+    frame: np.ndarray,
+    bounds: Bounds | PreparedBounds,
+    mean_fn: MeanFunction,
+) -> dict[str, bytes]:
+    """Average BGR regions and encode their Hue payload as RGB."""
+    bound_items = bounds.items() if isinstance(bounds, Mapping) else bounds
+    encoded: dict[str, bytes] = {}
+    for light, (top, bottom, left, right) in bound_items:
+        color = mean_fn(frame[top:bottom, left:right, :])
+        red = int(color[2] / 2)
+        green = int(color[1] / 2)
+        blue = int(color[0] / 2)
+        encoded[light] = bytes((red, red, green, green, blue, blue))
+    return encoded
+
+
 def build_stream_message(
     entertainment_id: str,
     rgb_bytes: Mapping[str, bytes],

@@ -15,11 +15,11 @@ try:
 except ModuleNotFoundError:
     cv2 = None
 from video_pipeline import (
-    BGR_CHANNEL_ORDER,
     LatestFrameBuffer,
     adjust_value_channel,
     build_light_bounds,
     build_stream_message,
+    sample_bgr_light_bytes,
     sample_light_bytes,
     send_stream_message,
 )
@@ -128,7 +128,7 @@ def baseline_bgr_process(frame, bounds, mean_fn):
 
 
 def candidate_bgr_process(frame, bounds, mean_fn):
-    return sample_light_bytes(frame, bounds, mean_fn, BGR_CHANNEL_ORDER)
+    return sample_bgr_light_bytes(frame, bounds, mean_fn)
 
 
 def production_mean(region: np.ndarray):

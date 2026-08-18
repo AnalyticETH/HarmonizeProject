@@ -30,11 +30,10 @@ import threading
 import fileinput
 import numpy as np
 from video_pipeline import (
-    BGR_CHANNEL_ORDER,
     LatestFrameBuffer,
     adjust_value_channel,
     build_stream_message,
-    sample_light_bytes,
+    sample_bgr_light_bytes,
     send_stream_message,
 )
 import cv2
@@ -335,11 +334,10 @@ def averageimage():
         if next_frame is None:
             break
         last_generation, frame = next_frame
-        rgb_bytes = sample_light_bytes(
+        rgb_bytes = sample_bgr_light_bytes(
             frame,
             prepared_bounds,
             cv2.mean,
-            BGR_CHANNEL_ORDER,
         )
 ######################################################
 ############ Video Capture Setup #####################
