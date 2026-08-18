@@ -323,6 +323,7 @@ def averageimage():
         bds = list(map(int, bds))
         bds = list(map(lambda x: 0 if x < 0 else x, bds))
         bounds[num] = bds
+    prepared_bounds = tuple(bounds.items())
    
     global rgb_bytes #array of RGB values, one for each light
     rgb_bytes = {}
@@ -336,7 +337,7 @@ def averageimage():
         last_generation, frame = next_frame
         rgb_bytes = sample_light_bytes(
             frame,
-            bounds,
+            prepared_bounds,
             cv2.mean,
             BGR_CHANNEL_ORDER,
         )

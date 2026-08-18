@@ -14,6 +14,8 @@ import numpy as np
 
 MeanFunction = Callable[[np.ndarray], Sequence[float]]
 Bounds = Mapping[str, tuple[int, int, int, int]]
+Bound = tuple[str, tuple[int, int, int, int]]
+PreparedBounds = tuple[Bound, ...]
 RGB_CHANNEL_ORDER = (0, 1, 2)
 BGR_CHANNEL_ORDER = (2, 1, 0)
 
@@ -90,13 +92,14 @@ def build_light_bounds(
 
 def sample_light_bytes(
     frame: np.ndarray,
-    bounds: Bounds,
+    bounds: Bounds | PreparedBounds,
     mean_fn: MeanFunction,
     channel_order: tuple[int, int, int] = RGB_CHANNEL_ORDER,
 ) -> dict[str, bytes]:
     """Average regions and encode Hue bytes in the requested channel order."""
+    bound_items = bounds.items() if isinstance(bounds, Mapping) else bounds
     encoded: dict[str, bytes] = {}
-    for light, (top, bottom, left, right) in bounds.items():
+    for light, (top, bottom, left, right) in bound_items:
         color = mean_fn(frame[top:bottom, left:right, :])
         red = int(color[channel_order[0]] / 2)
         green = int(color[channel_order[1]] / 2)

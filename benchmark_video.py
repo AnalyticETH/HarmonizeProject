@@ -141,9 +141,9 @@ def payload_checksum(payload) -> int:
     return sum(sum(values) for values in payload.values()) & 0xFFFFFFFF
 
 
-def assert_equivalent(frame, bounds, mean_fn) -> None:
+def assert_equivalent(frame, bounds, prepared_bounds, mean_fn) -> None:
     baseline_payload = baseline_process(frame, bounds, mean_fn)
-    candidate_payload = sample_light_bytes(frame, bounds, mean_fn)
+    candidate_payload = sample_light_bytes(frame, prepared_bounds, mean_fn)
     if baseline_payload != candidate_payload:
         raise RuntimeError("candidate payload differs from baseline implementation")
 
@@ -241,7 +241,8 @@ def measure_pair(
     candidate,
     baseline,
     frames,
-    bounds,
+    candidate_bounds,
+    baseline_bounds,
     mean_fn,
 ) -> tuple[float, list[int], float, list[int]]:
     candidate_elapsed: list[float] = []
@@ -250,15 +251,21 @@ def measure_pair(
     baseline_checksums: list[int] = []
     for repeat in range(REPEATS):
         ordered = (
-            (("candidate", candidate), ("baseline", baseline))
+            (
+                ("candidate", candidate, candidate_bounds),
+                ("baseline", baseline, baseline_bounds),
+            )
             if repeat % 2 == 0
-            else (("baseline", baseline), ("candidate", candidate))
+            else (
+                ("baseline", baseline, baseline_bounds),
+                ("candidate", candidate, candidate_bounds),
+            )
         )
-        for name, processor in ordered:
+        for name, processor, process_bounds in ordered:
             checksum = 0
             started = time.perf_counter_ns()
             for frame in frames:
-                payload = processor(frame, bounds, mean_fn)
+                payload = processor(frame, process_bounds, mean_fn)
                 checksum = (checksum + payload_checksum(payload)) & 0xFFFFFFFF
             duration = (time.perf_counter_ns() - started) / 1_000_000_000
             if name == "candidate":
@@ -388,18 +395,19 @@ def run() -> None:
     bounds = build_light_bounds(LIGHT_POSITIONS, WIDTH, HEIGHT)
     if any(bottom <= top or right <= left for top, bottom, left, right in bounds.values()):
         raise RuntimeError("benchmark fixture contains an empty light region")
+    prepared_bounds = tuple(bounds.items())
 
     mean_fn = production_mean
     for frame in frames[:4]:
-        assert_equivalent(frame, bounds, mean_fn)
+        assert_equivalent(frame, bounds, prepared_bounds, mean_fn)
     for frame in frames[:4]:
         baseline_bgr = baseline_bgr_process(frame, bounds, mean_fn)
-        candidate_bgr = candidate_bgr_process(frame, bounds, mean_fn)
+        candidate_bgr = candidate_bgr_process(frame, prepared_bounds, mean_fn)
         if baseline_bgr != candidate_bgr:
             raise RuntimeError("BGR sampling output differs from baseline")
 
     # Warm up NumPy/OpenCV dispatch and page in the fixture before timing.
-    warmup_payload = sample_light_bytes(frames[0], bounds, mean_fn)
+    warmup_payload = sample_light_bytes(frames[0], prepared_bounds, mean_fn)
     if not warmup_payload:
         raise RuntimeError("benchmark produced an empty payload")
 
@@ -417,6 +425,7 @@ def run() -> None:
         sample_light_bytes,
         baseline_process,
         frames,
+        prepared_bounds,
         bounds,
         mean_fn,
     )
@@ -429,6 +438,7 @@ def run() -> None:
         candidate_bgr_process,
         baseline_bgr_process,
         frames,
+        prepared_bounds,
         bounds,
         mean_fn,
     )
