@@ -295,11 +295,9 @@ def measure_stream_pair(entertainment_id, rgb_bytes):
         return candidate_cache.get(payload)
     for repeat in range(REPEATS):
         ordered = (
-            (
-                (("candidate", cached_builder), ("baseline", baseline_stream_message))
-                if repeat % 2 == 0
-                else (("baseline", baseline_stream_message), ("candidate", cached_builder))
-            )
+            (("candidate", cached_builder), ("baseline", baseline_stream_message))
+            if repeat % 2 == 0
+            else (("baseline", baseline_stream_message), ("candidate", cached_builder))
         )
         for name, builder in ordered:
             checksum = 0
