@@ -46,6 +46,7 @@ from termcolor import colored
 _cvt_color = cv2.cvtColor
 _BGR2HSV = cv2.COLOR_BGR2HSV
 _HSV2BGR = cv2.COLOR_HSV2BGR
+_cv2_mean = cv2.mean
 _LIGHT_CHANNEL_PAIRS = tuple(
     bytes((value // 2, value // 2))
     for value in range(256)
@@ -347,7 +348,7 @@ def averageimage():
         rgb_bytes = sample_bgr_region_bytes(
             frame,
             prepared_regions,
-            cv2.mean,
+            _cv2_mean,
         )
 ######################################################
 ############ Video Capture Setup #####################
@@ -388,7 +389,7 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
         ret, bgrframe = cap.read() # processes most recent frame
         if ret: # if frame is read properly
             if is_single_light:
-                channels = cv2.mean(bgrframe)
+                channels = _cv2_mean(bgrframe)
                 single_light_message = (
                     single_light_prefix
                     + _LIGHT_CHANNEL_PAIRS[int(channels[2])]
