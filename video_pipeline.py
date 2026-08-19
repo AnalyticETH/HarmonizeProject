@@ -181,6 +181,7 @@ class StreamMessageCache:
         self._light_keys: tuple[str, ...] | None = None
         self._light_ids: tuple[int, ...] = ()
         self._message_buffer = bytearray(self._header)
+        self._message = b""
 
     def get(self, rgb_bytes: Mapping[str, bytes]) -> bytes:
         if rgb_bytes is self._payload:
