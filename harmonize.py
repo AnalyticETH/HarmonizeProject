@@ -47,6 +47,8 @@ _LIGHT_CHANNEL_PAIRS = tuple(
     bytes((value // 2, value // 2))
     for value in range(256)
 )
+single_light_payload = b"\0" * 6
+
 
 # suppress SSL certificate verification warning
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -369,7 +371,7 @@ def init_video_capture():
 
 ######### Now that weve defined our RGB values as bytes, we define how we pull values from the video analyzer output
 def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls W/H
-    global w,h,channels,cap
+    global w,h,channels,cap,single_light_payload
     cap = init_video_capture()
     w  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))  # gets video width
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) # gets video height
@@ -383,6 +385,11 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
         if ret: # if frame is read properly
             if is_single_light:
                 channels = cv2.mean(bgrframe)
+                single_light_payload = (
+                    _LIGHT_CHANNEL_PAIRS[int(channels[2])]
+                    + _LIGHT_CHANNEL_PAIRS[int(channels[1])]
+                    + _LIGHT_CHANNEL_PAIRS[int(channels[0])]
+                )
             else:
                 bgrframe = adjust_brightness(bgrframe,commandlineargs.light_brightness)
                 frame_buffer.publish(bgrframe)
@@ -417,12 +424,7 @@ def buffer_to_light(proc): #Potentially thread this into 2 processes?
         )
 
         def current_message():
-            return (
-                single_light_prefix
-                + channel_pairs[int(channels[2])]
-                + channel_pairs[int(channels[1])]
-                + channel_pairs[int(channels[0])]
-            )
+            return single_light_prefix + single_light_payload
     else:
         def current_message():
             return message_cache.get(rgb_bytes)
