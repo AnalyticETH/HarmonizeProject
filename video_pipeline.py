@@ -193,8 +193,9 @@ def send_stream_message_on_schedule(
     else:
         next_deadline = now
     message = message_supplier()
-    proc.stdin.write(message)
-    proc.stdin.flush()
+    stdin = proc.stdin
+    stdin.write(message)
+    stdin.flush()
     return next_deadline + interval
 
 
