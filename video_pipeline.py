@@ -130,10 +130,11 @@ def sample_bgr_region_bytes(
     frame: np.ndarray,
     regions: PreparedRegions,
     mean_fn: MeanFunction,
+    encode_color: Callable[[Sequence[float]], bytes] = _encode_bgr_color,
 ) -> dict[str, bytes]:
     """Average pre-sliced BGR regions and encode their Hue payload as RGB."""
     return {
-        light: _encode_bgr_color(mean_fn(frame[row_slice, column_slice]))
+        light: encode_color(mean_fn(frame[row_slice, column_slice]))
         for light, (row_slice, column_slice) in regions
     }
 
