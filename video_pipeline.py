@@ -139,34 +139,59 @@ def sample_bgr_region_bytes(
     }
 
 
+_STREAM_HEADER = b"HueStream" + b"\2\0\0\0\0\0\0"
+
+
+def _build_stream_message(
+    header: bytes,
+    rgb_bytes: Mapping[str, bytes],
+    light_ids: Sequence[int] | None = None,
+) -> bytes:
+    message = bytearray(header)
+    if light_ids is None:
+        for light, payload in rgb_bytes.items():
+            message.append(int(light))
+            message.extend(payload)
+    else:
+        for light_id, payload in zip(light_ids, rgb_bytes.values()):
+            message.append(light_id)
+            message.extend(payload)
+    return bytes(message)
+
+
 def build_stream_message(
     entertainment_id: str,
     rgb_bytes: Mapping[str, bytes],
 ) -> bytes:
     """Assemble a Hue packet without repeated immutable-byte concatenation."""
-    message = bytearray(
-        b"HueStream"
-        + b"\2\0\0\0\0\0\0"
-        + entertainment_id.encode("utf-8")
+    return _build_stream_message(
+        _STREAM_HEADER + entertainment_id.encode("utf-8"),
+        rgb_bytes,
     )
-    for light, payload in rgb_bytes.items():
-        message.append(int(light))
-        message.extend(payload)
-    return bytes(message)
 
 
 class StreamMessageCache:
     """Reuse a packet while the analyzer payload mapping is unchanged."""
 
     def __init__(self, entertainment_id: str) -> None:
-        self._entertainment_id = entertainment_id
+        self._header = _STREAM_HEADER + entertainment_id.encode("utf-8")
         self._payload: Mapping[str, bytes] | None = None
+        self._light_keys: tuple[str, ...] | None = None
+        self._light_ids: tuple[int, ...] = ()
         self._message = b""
 
     def get(self, rgb_bytes: Mapping[str, bytes]) -> bytes:
         if rgb_bytes is self._payload:
             return self._message
-        self._message = build_stream_message(self._entertainment_id, rgb_bytes)
+        light_keys = tuple(rgb_bytes)
+        if light_keys != self._light_keys:
+            self._light_keys = light_keys
+            self._light_ids = tuple(map(int, light_keys))
+        self._message = _build_stream_message(
+            self._header,
+            rgb_bytes,
+            self._light_ids,
+        )
         self._payload = rgb_bytes
         return self._message
 
