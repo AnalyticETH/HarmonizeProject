@@ -371,7 +371,7 @@ def init_video_capture():
 
 ######### Now that weve defined our RGB values as bytes, we define how we pull values from the video analyzer output
 def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls W/H
-    global w,h,channels,cap,single_light_payload
+    global w,h,cap,single_light_payload
     cap = init_video_capture()
     w  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))  # gets video width
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) # gets video height
@@ -415,7 +415,6 @@ def buffer_to_light(proc): #Potentially thread this into 2 processes?
     time.sleep(1.5) #Hold on so DTLS connection can be made & message format can get defined
     message_cache = StreamMessageCache(entertainment_id)
     if is_single_light:
-        channel_pairs = _LIGHT_CHANNEL_PAIRS
         single_light_prefix = (
             b"HueStream"
             + b'\2\0\0\0\0\0\0'
