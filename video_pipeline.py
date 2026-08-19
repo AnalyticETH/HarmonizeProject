@@ -178,21 +178,20 @@ def send_stream_message(proc, message: bytes, sleep_fn: Callable[[float], None])
 
 def send_stream_message_on_schedule(
     proc,
-    message: bytes | Callable[[], bytes],
+    message_supplier: Callable[[], bytes],
     sleep_fn: Callable[[float], None],
     next_deadline: float,
     interval: float = 0.0167,
     monotonic_fn: Callable[[], float] = time.monotonic,
 ) -> float:
-    """Pace before each send, resolving a message supplier immediately before writing."""
+    """Pace before each send, resolving the supplier immediately before writing."""
     now = monotonic_fn()
     delay = next_deadline - now
     if delay > 0:
         sleep_fn(delay)
     else:
         next_deadline = now
-    if callable(message):
-        message = message()
+    message = message_supplier()
     proc.stdin.write(message)
     proc.stdin.flush()
     return next_deadline + interval
