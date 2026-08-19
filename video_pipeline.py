@@ -17,7 +17,7 @@ MeanFunction = Callable[[np.ndarray], Sequence[float]]
 Bounds = Mapping[str, tuple[int, int, int, int]]
 Bound = tuple[str, tuple[int, int, int, int]]
 PreparedBounds = tuple[Bound, ...]
-PreparedRegion = tuple[str, tuple[slice, slice]]
+PreparedRegion = tuple[str, slice, slice]
 PreparedRegions = tuple[PreparedRegion, ...]
 RGB_CHANNEL_ORDER = (0, 1, 2)
 
@@ -96,7 +96,7 @@ def build_light_bounds(
 def prepare_light_regions(bounds: PreparedBounds) -> PreparedRegions:
     """Precompute row and column slices for repeated frame analysis."""
     return tuple(
-        (light, (slice(top, bottom), slice(left, right)))
+        (light, slice(top, bottom), slice(left, right))
         for light, (top, bottom, left, right) in bounds
     )
 
@@ -126,7 +126,7 @@ def sample_bgr_region_bytes(
 ) -> dict[str, bytes]:
     """Average pre-sliced BGR regions and encode their Hue payload as RGB."""
     encoded: dict[str, bytes] = {}
-    for light, (row_slice, column_slice) in regions:
+    for light, row_slice, column_slice in regions:
         color = mean_fn(frame[row_slice, column_slice])
         red = int(color[2]) >> 1
         green = int(color[1]) >> 1
