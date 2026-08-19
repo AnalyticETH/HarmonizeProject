@@ -11,6 +11,7 @@ from threading import Condition
 import time
 
 import numpy as np
+_TAKE = np.take
 
 
 MeanFunction = Callable[[np.ndarray], Sequence[float]]
@@ -33,7 +34,7 @@ def _brightness_lut(value: int) -> np.ndarray:
 def adjust_value_channel(hsv: np.ndarray, value: int) -> np.ndarray:
     """Apply the production saturating brightness shift in place."""
     value_channel = hsv[:, :, 2]
-    np.take(_brightness_lut(value), value_channel, out=value_channel)
+    _TAKE(_brightness_lut(value), value_channel, out=value_channel)
     return hsv
 
 
