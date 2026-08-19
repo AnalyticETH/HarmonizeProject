@@ -144,14 +144,16 @@ def _build_stream_message(
     light_ids: Sequence[int] | None = None,
 ) -> bytes:
     message = bytearray(header)
+    append = message.append
+    extend = message.extend
     if light_ids is None:
         for light, payload in rgb_bytes.items():
-            message.append(int(light))
-            message.extend(payload)
+            append(int(light))
+            extend(payload)
     else:
         for light_id, payload in zip(light_ids, rgb_bytes.values()):
-            message.append(light_id)
-            message.extend(payload)
+            append(light_id)
+            extend(payload)
     return bytes(message)
 
 
