@@ -147,9 +147,7 @@ def _build_stream_message(
     if message is None:
         message = bytearray(header)
     else:
-        header_size = len(header)
-        message[:header_size] = header
-        del message[header_size:]
+        del message[len(header):]
     append = message.append
     extend = message.extend
     if light_ids is None:
