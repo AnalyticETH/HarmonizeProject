@@ -44,6 +44,8 @@ from pathlib import Path
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 from termcolor import colored
 _cvt_color = cv2.cvtColor
+_BGR2HSV = cv2.COLOR_BGR2HSV
+_HSV2BGR = cv2.COLOR_HSV2BGR
 _LIGHT_CHANNEL_PAIRS = tuple(
     bytes((value // 2, value // 2))
     for value in range(256)
@@ -405,9 +407,9 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
                     cap.open(0)
 
 def adjust_brightness(raw, value):
-    hsv = _cvt_color(raw, cv2.COLOR_BGR2HSV)
+    hsv = _cvt_color(raw, _BGR2HSV)
     hsv = adjust_value_channel(hsv, value)
-    return _cvt_color(hsv, cv2.COLOR_HSV2BGR)
+    return _cvt_color(hsv, _HSV2BGR)
 
 ######################################################
 ############## Sending the messages ##################
