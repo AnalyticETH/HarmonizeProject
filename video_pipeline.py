@@ -163,9 +163,10 @@ class StreamMessageCache:
         self._message = b""
 
     def get(self, rgb_bytes: Mapping[str, bytes]) -> bytes:
-        if rgb_bytes is not self._payload:
-            self._message = build_stream_message(self._entertainment_id, rgb_bytes)
-            self._payload = rgb_bytes
+        if rgb_bytes is self._payload:
+            return self._message
+        self._message = build_stream_message(self._entertainment_id, rgb_bytes)
+        self._payload = rgb_bytes
         return self._message
 
 
