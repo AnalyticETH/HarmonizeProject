@@ -33,7 +33,7 @@ def _brightness_lut(value: int) -> np.ndarray:
 def adjust_value_channel(hsv: np.ndarray, value: int) -> np.ndarray:
     """Apply the production saturating brightness shift in place."""
     value_channel = hsv[:, :, 2]
-    value_channel[...] = _brightness_lut(value)[value_channel]
+    np.take(_brightness_lut(value), value_channel, out=value_channel)
     return hsv
 
 
