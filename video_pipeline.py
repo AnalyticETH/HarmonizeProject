@@ -142,8 +142,14 @@ def _build_stream_message(
     header: bytes,
     rgb_bytes: Mapping[str, bytes],
     light_ids: Sequence[int] | None = None,
+    message: bytearray | None = None,
 ) -> bytes:
-    message = bytearray(header)
+    if message is None:
+        message = bytearray(header)
+    else:
+        header_size = len(header)
+        message[:header_size] = header
+        del message[header_size:]
     append = message.append
     extend = message.extend
     if light_ids is None:
@@ -176,7 +182,7 @@ class StreamMessageCache:
         self._payload: Mapping[str, bytes] | None = None
         self._light_keys: tuple[str, ...] | None = None
         self._light_ids: tuple[int, ...] = ()
-        self._message = b""
+        self._message_buffer = bytearray(self._header)
 
     def get(self, rgb_bytes: Mapping[str, bytes]) -> bytes:
         if rgb_bytes is self._payload:
@@ -189,6 +195,7 @@ class StreamMessageCache:
             self._header,
             rgb_bytes,
             self._light_ids,
+            self._message_buffer,
         )
         self._payload = rgb_bytes
         return self._message
