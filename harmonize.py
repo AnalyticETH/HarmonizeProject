@@ -47,7 +47,8 @@ _LIGHT_CHANNEL_PAIRS = tuple(
     bytes((value // 2, value // 2))
     for value in range(256)
 )
-single_light_payload = b"\0" * 6
+single_light_prefix = b""
+single_light_message = b""
 
 
 # suppress SSL certificate verification warning
@@ -371,7 +372,7 @@ def init_video_capture():
 
 ######### Now that weve defined our RGB values as bytes, we define how we pull values from the video analyzer output
 def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls W/H
-    global w,h,cap,single_light_payload
+    global w,h,cap,single_light_prefix,single_light_message
     cap = init_video_capture()
     w  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))  # gets video width
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) # gets video height
@@ -385,8 +386,9 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
         if ret: # if frame is read properly
             if is_single_light:
                 channels = cv2.mean(bgrframe)
-                single_light_payload = (
-                    _LIGHT_CHANNEL_PAIRS[int(channels[2])]
+                single_light_message = (
+                    single_light_prefix
+                    + _LIGHT_CHANNEL_PAIRS[int(channels[2])]
                     + _LIGHT_CHANNEL_PAIRS[int(channels[1])]
                     + _LIGHT_CHANNEL_PAIRS[int(channels[0])]
                 )
@@ -415,15 +417,8 @@ def buffer_to_light(proc): #Potentially thread this into 2 processes?
     time.sleep(1.5) #Hold on so DTLS connection can be made & message format can get defined
     message_cache = StreamMessageCache(entertainment_id)
     if is_single_light:
-        single_light_prefix = (
-            b"HueStream"
-            + b'\2\0\0\0\0\0\0'
-            + entertainment_id.encode("utf-8")
-            + b"\1"
-        )
-
         def current_message():
-            return single_light_prefix + single_light_payload
+            return single_light_message
     else:
         def current_message():
             return message_cache.get(rgb_bytes)
@@ -470,6 +465,12 @@ try:
             print("Initializing video frame grabber...")
             time.sleep(commandlineargs.video_wait_time) # wait sufficiently until first frame is published
             if (commandlineargs.single_light is True) and (len(lights_dict)==1):
+                single_light_prefix = (
+                    b"HueStream"
+                    + b'\2\0\0\0\0\0\0'
+                    + entertainment_id.encode("utf-8")
+                    + b"\1"
+                )
                 is_single_light = True
                 print("Enabled optimization for single light source") # averager thread is not utilized
             else:
