@@ -43,6 +43,10 @@ import re
 from pathlib import Path
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 from termcolor import colored
+_LIGHT_CHANNEL_PAIRS = tuple(
+    bytes((value // 2, value // 2))
+    for value in range(256)
+)
 
 # suppress SSL certificate verification warning
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -413,15 +417,12 @@ def buffer_to_light(proc): #Potentially thread this into 2 processes?
 
     def current_message():
         if is_single_light:
-            single_light_bytes = bytes((
-                int(channels[2]/2),
-                int(channels[2]/2),
-                int(channels[1]/2),
-                int(channels[1]/2),
-                int(channels[0]/2),
-                int(channels[0]/2),
-            ))
-            return single_light_prefix + single_light_bytes
+            return (
+                single_light_prefix
+                + _LIGHT_CHANNEL_PAIRS[int(channels[2])]
+                + _LIGHT_CHANNEL_PAIRS[int(channels[1])]
+                + _LIGHT_CHANNEL_PAIRS[int(channels[0])]
+            )
         return message_cache.get(rgb_bytes)
 
     while not stopped:
