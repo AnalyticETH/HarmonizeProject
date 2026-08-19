@@ -120,9 +120,9 @@ def sample_light_bytes(
 
 
 def _encode_bgr_color(color: Sequence[float]) -> bytes:
-    red = int(color[2] * 0.5)
-    green = int(color[1] * 0.5)
-    blue = int(color[0] * 0.5)
+    red = int(color[2]) >> 1
+    green = int(color[1]) >> 1
+    blue = int(color[0]) >> 1
     return bytes((red, red, green, green, blue, blue))
 
 
