@@ -174,14 +174,6 @@ def build_stream_message(
 
 class StreamMessageCache:
     """Reuse a packet while the analyzer payload mapping is unchanged."""
-    __slots__ = (
-        "_header",
-        "_payload",
-        "_light_keys",
-        "_light_ids",
-        "_message_buffer",
-        "_message",
-    )
 
     def __init__(self, entertainment_id: str) -> None:
         self._header = _STREAM_HEADER + entertainment_id.encode("utf-8")
