@@ -408,6 +408,7 @@ def buffer_to_light(proc): #Potentially thread this into 2 processes?
     time.sleep(1.5) #Hold on so DTLS connection can be made & message format can get defined
     message_cache = StreamMessageCache(entertainment_id)
     if is_single_light:
+        channel_pairs = _LIGHT_CHANNEL_PAIRS
         single_light_prefix = (
             b"HueStream"
             + b'\2\0\0\0\0\0\0'
@@ -418,9 +419,9 @@ def buffer_to_light(proc): #Potentially thread this into 2 processes?
         def current_message():
             return (
                 single_light_prefix
-                + _LIGHT_CHANNEL_PAIRS[int(channels[2])]
-                + _LIGHT_CHANNEL_PAIRS[int(channels[1])]
-                + _LIGHT_CHANNEL_PAIRS[int(channels[0])]
+                + channel_pairs[int(channels[2])]
+                + channel_pairs[int(channels[1])]
+                + channel_pairs[int(channels[0])]
             )
     else:
         def current_message():
