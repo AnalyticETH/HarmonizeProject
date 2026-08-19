@@ -128,9 +128,9 @@ def sample_bgr_region_bytes(
     encoded: dict[str, bytes] = {}
     for light, row_slice, column_slice in regions:
         color = mean_fn(frame[row_slice, column_slice])
-        red = int(color[2]) >> 1
-        green = int(color[1]) >> 1
-        blue = int(color[0]) >> 1
+        red = int(color[2] // 2)
+        green = int(color[1] // 2)
+        blue = int(color[0] // 2)
         encoded[light] = bytes((red, red, green, green, blue, blue))
     return encoded
 
