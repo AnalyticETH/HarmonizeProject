@@ -424,8 +424,9 @@ def buffer_to_light(proc): #Potentially thread this into 2 processes?
         def current_message():
             return single_light_message
     else:
+        cache_get = message_cache.get
         def current_message():
-            return message_cache.get(rgb_bytes)
+            return cache_get(rgb_bytes)
     next_deadline = time.monotonic()
     send_scheduled = send_stream_message_on_schedule
     sleep_fn = time.sleep
