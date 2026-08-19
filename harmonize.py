@@ -285,7 +285,6 @@ jsondata = r_v2.json()
 verbose(jsondata)
         
 ######### Prepare the messages' vessel for the RGB values we will insert
-bufferlock = threading.Lock()
 
 ######################################################
 ################# Setup Complete #####################
@@ -407,15 +406,11 @@ def buffer_to_light(proc): #Potentially thread this into 2 processes?
     next_deadline = time.monotonic()
 
     def current_message():
-        bufferlock.acquire()
-        try:
-            if is_single_light:
-                message = bytes('HueStream','utf-8') + b'\2\0\0\0\0\0\0' + bytes(entertainment_id,'utf-8')
-                single_light_bytes = bytearray([int(channels[2]/2), int(channels[2]/2), int(channels[1]/2), int(channels[1]/2), int(channels[0]/2), int(channels[0]/2),] ) # channels corrected here from BGR to RGB
-                return message + bytes(chr(int(1)), 'utf-8') + single_light_bytes
-            return message_cache.get(rgb_bytes)
-        finally:
-            bufferlock.release()
+        if is_single_light:
+            message = bytes('HueStream','utf-8') + b'\2\0\0\0\0\0\0' + bytes(entertainment_id,'utf-8')
+            single_light_bytes = bytearray([int(channels[2]/2), int(channels[2]/2), int(channels[1]/2), int(channels[1]/2), int(channels[0]/2), int(channels[0]/2),] ) # channels corrected here from BGR to RGB
+            return message + bytes(chr(int(1)), 'utf-8') + single_light_bytes
+        return message_cache.get(rgb_bytes)
 
     while not stopped:
         next_deadline = send_stream_message_on_schedule(
