@@ -389,6 +389,10 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
         ret, bgrframe = cap.read() # processes most recent frame
         if ret: # if frame is read properly
             if is_single_light:
+                bgrframe = adjust_brightness(
+                    bgrframe,
+                    commandlineargs.light_brightness,
+                )
                 channels = _cv2_mean(bgrframe)
                 single_light_message = (
                     single_light_prefix
@@ -469,11 +473,12 @@ try:
             print("Initializing video frame grabber...")
             time.sleep(commandlineargs.video_wait_time) # wait sufficiently until first frame is published
             if (commandlineargs.single_light is True) and (len(lights_dict)==1):
+                single_light_id = next(iter(lights_dict))
                 single_light_prefix = (
                     b"HueStream"
                     + b'\2\0\0\0\0\0\0'
                     + entertainment_id.encode("utf-8")
-                    + b"\1"
+                    + bytes((int(single_light_id),))
                 )
                 single_light_message = single_light_prefix + b"\0" * 6
                 is_single_light = True
