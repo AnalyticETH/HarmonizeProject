@@ -407,23 +407,25 @@ def adjust_brightness(raw, value):
 def buffer_to_light(proc): #Potentially thread this into 2 processes?
     time.sleep(1.5) #Hold on so DTLS connection can be made & message format can get defined
     message_cache = StreamMessageCache(entertainment_id)
-    single_light_prefix = (
-        b"HueStream"
-        + b'\2\0\0\0\0\0\0'
-        + entertainment_id.encode("utf-8")
-        + b"\1"
-    )
-    next_deadline = time.monotonic()
+    if is_single_light:
+        single_light_prefix = (
+            b"HueStream"
+            + b'\2\0\0\0\0\0\0'
+            + entertainment_id.encode("utf-8")
+            + b"\1"
+        )
 
-    def current_message():
-        if is_single_light:
+        def current_message():
             return (
                 single_light_prefix
                 + _LIGHT_CHANNEL_PAIRS[int(channels[2])]
                 + _LIGHT_CHANNEL_PAIRS[int(channels[1])]
                 + _LIGHT_CHANNEL_PAIRS[int(channels[0])]
             )
-        return message_cache.get(rgb_bytes)
+    else:
+        def current_message():
+            return message_cache.get(rgb_bytes)
+    next_deadline = time.monotonic()
 
     while not stopped:
         next_deadline = send_stream_message_on_schedule(
