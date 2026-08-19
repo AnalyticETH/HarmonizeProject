@@ -32,7 +32,7 @@ import numpy as np
 from video_pipeline import (
     LatestFrameBuffer,
     StreamMessageCache,
-    adjust_value_channel,
+    _brightness_lut,
     prepare_light_regions,
     sample_bgr_region_bytes,
     send_stream_message_on_schedule,
@@ -47,6 +47,7 @@ _cvt_color = cv2.cvtColor
 _BGR2HSV = cv2.COLOR_BGR2HSV
 _HSV2BGR = cv2.COLOR_HSV2BGR
 _cv2_mean = cv2.mean
+_cv2_lut = cv2.LUT
 _LIGHT_CHANNEL_PAIRS = tuple(
     bytes((value // 2, value // 2))
     for value in range(256)
@@ -413,7 +414,7 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
 
 def adjust_brightness(raw, value):
     hsv = _cvt_color(raw, _BGR2HSV)
-    hsv = adjust_value_channel(hsv, value)
+    hsv[:, :, 2] = _cv2_lut(hsv[:, :, 2], _brightness_lut(value))
     return _cvt_color(hsv, _HSV2BGR)
 
 ######################################################
