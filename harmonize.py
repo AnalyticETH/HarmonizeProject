@@ -35,7 +35,7 @@ from video_pipeline import (
     adjust_value_channel,
     prepare_light_regions,
     sample_bgr_region_bytes,
-    send_stream_message,
+    send_stream_message_on_schedule,
 )
 import cv2
 import re
@@ -404,18 +404,26 @@ def adjust_brightness(raw, value):
 def buffer_to_light(proc): #Potentially thread this into 2 processes?
     time.sleep(1.5) #Hold on so DTLS connection can be made & message format can get defined
     message_cache = StreamMessageCache(entertainment_id)
-    while not stopped:
+    next_deadline = time.monotonic()
+
+    def current_message():
         bufferlock.acquire()
-        
-        if is_single_light:
-            message = bytes('HueStream','utf-8') + b'\2\0\0\0\0\0\0' + bytes(entertainment_id,'utf-8')
-            single_light_bytes = bytearray([int(channels[2]/2), int(channels[2]/2), int(channels[1]/2), int(channels[1]/2), int(channels[0]/2), int(channels[0]/2),] ) # channels corrected here from BGR to RGB
-            message += bytes(chr(int(1)), 'utf-8') + single_light_bytes
-        else:
-            message = message_cache.get(rgb_bytes)
- 
-        bufferlock.release()
-        send_stream_message(proc, message, time.sleep)
+        try:
+            if is_single_light:
+                message = bytes('HueStream','utf-8') + b'\2\0\0\0\0\0\0' + bytes(entertainment_id,'utf-8')
+                single_light_bytes = bytearray([int(channels[2]/2), int(channels[2]/2), int(channels[1]/2), int(channels[1]/2), int(channels[0]/2), int(channels[0]/2),] ) # channels corrected here from BGR to RGB
+                return message + bytes(chr(int(1)), 'utf-8') + single_light_bytes
+            return message_cache.get(rgb_bytes)
+        finally:
+            bufferlock.release()
+
+    while not stopped:
+        next_deadline = send_stream_message_on_schedule(
+            proc,
+            current_message,
+            time.sleep,
+            next_deadline,
+        )
         #verbose('Wrote message and flushed. Briefly waiting') #This will verbose after every send, spamming the console.
 
 ######################################################
