@@ -380,13 +380,9 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
 
 ########## This section loops & pulls re-colored frames and alwyas get the newest frame 
     cap.set(cv2.CAP_PROP_BUFFERSIZE,0) # No frame buffer to avoid lagging, always grab newest frame
-    read_frame = cap.read
-    publish_frame = frame_buffer.publish
-    adjust_frame = adjust_brightness
-    brightness_value = commandlineargs.light_brightness
     missed_frame_count = 0
     while not stopped:
-        ret, bgrframe = read_frame() # processes most recent frame
+        ret, bgrframe = cap.read() # processes most recent frame
         if ret: # if frame is read properly
             if is_single_light:
                 channels = cv2.mean(bgrframe)
@@ -397,8 +393,8 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
                     + _LIGHT_CHANNEL_PAIRS[int(channels[0])]
                 )
             else:
-                bgrframe = adjust_frame(bgrframe, brightness_value)
-                publish_frame(bgrframe)
+                bgrframe = adjust_brightness(bgrframe,commandlineargs.light_brightness)
+                frame_buffer.publish(bgrframe)
         else:
             print("WARNING: Unable to read frame from video stream")
             time.sleep(1)
@@ -424,18 +420,15 @@ def buffer_to_light(proc): #Potentially thread this into 2 processes?
         def current_message():
             return single_light_message
     else:
-        cache_get = message_cache.get
         def current_message():
-            return cache_get(rgb_bytes)
-    next_deadline = time.monotonic()
-    send_scheduled = send_stream_message_on_schedule
-    sleep_fn = time.sleep
+            return message_cache.get(rgb_bytes)
 
+    next_deadline = time.monotonic()
     while not stopped:
-        next_deadline = send_scheduled(
+        next_deadline = send_stream_message_on_schedule(
             proc,
             current_message,
-            sleep_fn,
+            time.sleep,
             next_deadline,
         )
         #verbose('Wrote message and flushed. Briefly waiting') #This will verbose after every send, spamming the console.
