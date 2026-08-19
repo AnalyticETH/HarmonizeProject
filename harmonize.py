@@ -390,7 +390,7 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
         ret, bgrframe = cap.read() # processes most recent frame
         if ret: # if frame is read properly
             if is_single_light:
-                bgrframe = adjust_brightness(
+                bgrframe = _adjust_brightness_inplace(
                     bgrframe,
                     commandlineargs.light_brightness,
                 )
@@ -402,7 +402,7 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
                     + _LIGHT_CHANNEL_PAIRS[int(channels[0])]
                 )
             else:
-                bgrframe = adjust_brightness(bgrframe,commandlineargs.light_brightness)
+                bgrframe = _adjust_brightness_inplace(bgrframe,commandlineargs.light_brightness)
                 frame_buffer.publish(bgrframe)
         else:
             print("WARNING: Unable to read frame from video stream")
@@ -417,6 +417,12 @@ def adjust_brightness(raw, value):
     hsv[:, :, 2] = _cv2_lut(hsv[:, :, 2], _brightness_lut(value))
     _cvt_color(hsv, _HSV2BGR, hsv)
     return hsv
+
+def _adjust_brightness_inplace(raw, value):
+    _cvt_color(raw, _BGR2HSV, raw)
+    raw[:, :, 2] = _cv2_lut(raw[:, :, 2], _brightness_lut(value))
+    _cvt_color(raw, _HSV2BGR, raw)
+    return raw
 
 ######################################################
 ############## Sending the messages ##################
