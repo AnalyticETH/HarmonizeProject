@@ -415,7 +415,8 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
 def adjust_brightness(raw, value):
     hsv = _cvt_color(raw, _BGR2HSV)
     hsv[:, :, 2] = _cv2_lut(hsv[:, :, 2], _brightness_lut(value))
-    return _cvt_color(hsv, _HSV2BGR)
+    _cvt_color(hsv, _HSV2BGR, hsv)
+    return hsv
 
 ######################################################
 ############## Sending the messages ##################
