@@ -119,11 +119,15 @@ def sample_light_bytes(
     return encoded
 
 
-def _encode_bgr_color(color: Sequence[float]) -> bytes:
-    red = int(color[2] * 0.5)
-    green = int(color[1] * 0.5)
-    blue = int(color[0] * 0.5)
-    return bytes((red, red, green, green, blue, blue))
+def _encode_bgr_color(
+    color: Sequence[float],
+    int_fn: Callable[[float], int] = int,
+    bytes_fn: Callable[[Sequence[int]], bytes] = bytes,
+) -> bytes:
+    red = int_fn(color[2] * 0.5)
+    green = int_fn(color[1] * 0.5)
+    blue = int_fn(color[0] * 0.5)
+    return bytes_fn((red, red, green, green, blue, blue))
 
 
 def sample_bgr_region_bytes(
