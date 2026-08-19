@@ -403,13 +403,25 @@ def adjust_brightness(raw, value):
 def buffer_to_light(proc): #Potentially thread this into 2 processes?
     time.sleep(1.5) #Hold on so DTLS connection can be made & message format can get defined
     message_cache = StreamMessageCache(entertainment_id)
+    single_light_prefix = (
+        b"HueStream"
+        + b'\2\0\0\0\0\0\0'
+        + entertainment_id.encode("utf-8")
+        + b"\1"
+    )
     next_deadline = time.monotonic()
 
     def current_message():
         if is_single_light:
-            message = bytes('HueStream','utf-8') + b'\2\0\0\0\0\0\0' + bytes(entertainment_id,'utf-8')
-            single_light_bytes = bytearray([int(channels[2]/2), int(channels[2]/2), int(channels[1]/2), int(channels[1]/2), int(channels[0]/2), int(channels[0]/2),] ) # channels corrected here from BGR to RGB
-            return message + bytes(chr(int(1)), 'utf-8') + single_light_bytes
+            single_light_bytes = bytes((
+                int(channels[2]/2),
+                int(channels[2]/2),
+                int(channels[1]/2),
+                int(channels[1]/2),
+                int(channels[0]/2),
+                int(channels[0]/2),
+            ))
+            return single_light_prefix + single_light_bytes
         return message_cache.get(rgb_bytes)
 
     while not stopped:
