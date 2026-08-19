@@ -471,6 +471,7 @@ try:
                     + entertainment_id.encode("utf-8")
                     + b"\1"
                 )
+                single_light_message = single_light_prefix + b"\0" * 6
                 is_single_light = True
                 print("Enabled optimization for single light source") # averager thread is not utilized
             else:
