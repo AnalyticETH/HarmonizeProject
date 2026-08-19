@@ -427,12 +427,14 @@ def buffer_to_light(proc): #Potentially thread this into 2 processes?
         def current_message():
             return message_cache.get(rgb_bytes)
     next_deadline = time.monotonic()
+    send_scheduled = send_stream_message_on_schedule
+    sleep_fn = time.sleep
 
     while not stopped:
-        next_deadline = send_stream_message_on_schedule(
+        next_deadline = send_scheduled(
             proc,
             current_message,
-            time.sleep,
+            sleep_fn,
             next_deadline,
         )
         #verbose('Wrote message and flushed. Briefly waiting') #This will verbose after every send, spamming the console.
