@@ -51,7 +51,7 @@ class LatestFrameBuffer:
             self._frame = frame
             self._generation += 1
             generation = self._generation
-            self._condition.notify()
+            self._condition.notify_all()
             return generation
 
     def next_frame(self, last_generation: int) -> tuple[int, np.ndarray] | None:
