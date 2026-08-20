@@ -450,6 +450,7 @@ def buffer_to_light(proc): #Potentially thread this into 2 processes?
             current_message,
             time.sleep,
             next_deadline,
+            flush=False,
         )
         #verbose('Wrote message and flushed. Briefly waiting') #This will verbose after every send, spamming the console.
 

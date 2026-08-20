@@ -7,7 +7,6 @@ while the benchmark can run without a camera, bridge, or OpenCV installation.
 
 from collections.abc import Callable, Mapping, Sequence
 from functools import lru_cache
-from io import FileIO
 from threading import Condition
 import time
 
@@ -215,6 +214,7 @@ def send_stream_message_on_schedule(
     next_deadline: float,
     interval: float = 0.0167,
     monotonic_fn: Callable[[], float] = time.monotonic,
+    flush: bool = True,
 ) -> float:
     """Pace before each send, resolving the supplier immediately before writing."""
     now = monotonic_fn()
@@ -226,7 +226,7 @@ def send_stream_message_on_schedule(
     message = message_supplier()
     stdin = proc.stdin
     stdin.write(message)
-    if not isinstance(stdin, FileIO):
+    if flush:
         stdin.flush()
     return next_deadline + interval
 
