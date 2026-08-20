@@ -48,6 +48,7 @@ _BGR2HSV = cv2.COLOR_BGR2HSV
 _HSV2BGR = cv2.COLOR_HSV2BGR
 _cv2_mean = cv2.mean
 _cv2_lut = cv2.LUT
+_cv2_add = cv2.add
 _LIGHT_CHANNEL_PAIRS = tuple(
     bytes((value // 2, value // 2))
     for value in range(256)
@@ -420,7 +421,10 @@ def adjust_brightness(raw, value):
 
 def _adjust_brightness_inplace(raw, value):
     _cvt_color(raw, _BGR2HSV, raw)
-    raw[:, :, 2] = _cv2_lut(raw[:, :, 2], _brightness_lut(value))
+    if 0 <= value <= 255:
+        raw[:, :, 2] = _cv2_add(raw[:, :, 2], value)
+    else:
+        raw[:, :, 2] = _cv2_lut(raw[:, :, 2], _brightness_lut(value))
     _cvt_color(raw, _HSV2BGR, raw)
     return raw
 
