@@ -7,6 +7,7 @@ while the benchmark can run without a camera, bridge, or OpenCV installation.
 
 from collections.abc import Callable, Mapping, Sequence
 from functools import lru_cache
+from io import FileIO
 from threading import Condition
 import time
 
@@ -225,7 +226,8 @@ def send_stream_message_on_schedule(
     message = message_supplier()
     stdin = proc.stdin
     stdin.write(message)
-    stdin.flush()
+    if not isinstance(stdin, FileIO):
+        stdin.flush()
     return next_deadline + interval
 
 
