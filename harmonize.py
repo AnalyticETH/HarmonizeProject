@@ -409,7 +409,8 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
             else:
                 bgrframe = _adjust_brightness_inplace(bgrframe,commandlineargs.light_brightness)
                 frame_buffer.publish(bgrframe)
-            frame_ready.set()
+            if not frame_ready.is_set():
+                frame_ready.set()
         else:
             print("WARNING: Unable to read frame from video stream")
             time.sleep(1)
