@@ -446,7 +446,7 @@ def buffer_to_light(proc, proc_started=None): #Potentially thread this into 2 pr
         delay = proc_started + 1.5 - time.monotonic()
         if delay > 0:
             time.sleep(delay)
-    message_cache = StreamMessageCache(entertainment_id)
+    message_cache = StreamMessageCache(entertainment_id, tuple(lights_dict))
     if is_single_light:
         def current_message():
             return single_light_message

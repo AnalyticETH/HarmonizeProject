@@ -175,21 +175,27 @@ def build_stream_message(
 class StreamMessageCache:
     """Reuse a packet while the analyzer payload mapping is unchanged."""
 
-    def __init__(self, entertainment_id: str) -> None:
+    def __init__(
+        self,
+        entertainment_id: str,
+        light_ids: Sequence[str] | None = None,
+    ) -> None:
         self._header = _STREAM_HEADER + entertainment_id.encode("utf-8")
         self._payload: Mapping[str, bytes] | None = None
+        self._fixed_light_ids = light_ids is not None
         self._light_keys: tuple[str, ...] | None = None
-        self._light_ids: tuple[int, ...] = ()
+        self._light_ids = () if light_ids is None else tuple(map(int, light_ids))
         self._message_buffer = bytearray(self._header)
         self._message = b""
 
     def get(self, rgb_bytes: Mapping[str, bytes]) -> bytes:
         if rgb_bytes is self._payload:
             return self._message
-        light_keys = tuple(rgb_bytes)
-        if light_keys != self._light_keys:
-            self._light_keys = light_keys
-            self._light_ids = tuple(map(int, light_keys))
+        if not self._fixed_light_ids:
+            light_keys = tuple(rgb_bytes)
+            if light_keys != self._light_keys:
+                self._light_keys = light_keys
+                self._light_ids = tuple(map(int, light_keys))
         self._message = _build_stream_message(
             self._header,
             rgb_bytes,
