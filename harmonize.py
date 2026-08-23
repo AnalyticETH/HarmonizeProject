@@ -76,6 +76,8 @@ class MyListener(ServiceListener):
 
 zeroconf = Zeroconf()
 frame_buffer = LatestFrameBuffer()
+frame_ready = threading.Event()
+analysis_ready = threading.Event()
 listener = MyListener()
 
 parser = argparse.ArgumentParser()
@@ -352,6 +354,8 @@ def averageimage():
             prepared_regions,
             _cv2_mean,
         )
+        if not analysis_ready.is_set():
+            analysis_ready.set()
 ######################################################
 ############ Video Capture Setup #####################
 ######################################################
@@ -405,6 +409,7 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
             else:
                 bgrframe = _adjust_brightness_inplace(bgrframe,commandlineargs.light_brightness)
                 frame_buffer.publish(bgrframe)
+            frame_ready.set()
         else:
             print("WARNING: Unable to read frame from video stream")
             time.sleep(1)
@@ -484,7 +489,7 @@ try:
             t.start()
             threads.append(t)
             print("Initializing video frame grabber...")
-            time.sleep(commandlineargs.video_wait_time) # wait sufficiently until first frame is published
+            frame_ready.wait(commandlineargs.video_wait_time)
             if (commandlineargs.single_light is True) and (len(lights_dict)==1):
                 single_light_id = next(iter(lights_dict))
                 single_light_prefix = (
@@ -502,7 +507,7 @@ try:
                 t = threading.Thread(target=averageimage)
                 t.start()
                 threads.append(t)
-            time.sleep(0.50) # wait sufficiently until rgb_bytes is defined from above thread
+                analysis_ready.wait(0.50)
             verbose("Opening an SSL packet stream to lights on network...")
             cmd = ["openssl","s_client","-dtls1_2","-cipher","PSK-AES128-GCM-SHA256","-psk_identity",hue_app_id,"-psk",clientdata['clientkey'], "-connect", hueip+":2100"]
             proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
