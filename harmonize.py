@@ -439,8 +439,13 @@ def _adjust_brightness_inplace(raw, value):
 ######################################################
 
 ######### This is where we define our message format and insert our light#s, RGB values, and X,Y,Brightness ##########
-def buffer_to_light(proc): #Potentially thread this into 2 processes?
-    time.sleep(1.5) #Hold on so DTLS connection can be made & message format can get defined
+def buffer_to_light(proc, proc_started=None): #Potentially thread this into 2 processes?
+    if proc_started is None:
+        time.sleep(1.5) #Hold on so DTLS connection can be made & message format can get defined
+    else:
+        delay = proc_started + 1.5 - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
     message_cache = StreamMessageCache(entertainment_id)
     if is_single_light:
         def current_message():
@@ -489,6 +494,10 @@ try:
             t.start()
             threads.append(t)
             print("Initializing video frame grabber...")
+            verbose("Opening an SSL packet stream to lights on network...")
+            cmd = ["openssl","s_client","-dtls1_2","-cipher","PSK-AES128-GCM-SHA256","-psk_identity",hue_app_id,"-psk",clientdata['clientkey'], "-connect", hueip+":2100"]
+            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
+            proc_started = time.monotonic()
             frame_ready.wait(commandlineargs.video_wait_time)
             if (commandlineargs.single_light is True) and (len(lights_dict)==1):
                 single_light_id = next(iter(lights_dict))
@@ -508,10 +517,7 @@ try:
                 t.start()
                 threads.append(t)
                 analysis_ready.wait(0.50)
-            verbose("Opening an SSL packet stream to lights on network...")
-            cmd = ["openssl","s_client","-dtls1_2","-cipher","PSK-AES128-GCM-SHA256","-psk_identity",hue_app_id,"-psk",clientdata['clientkey'], "-connect", hueip+":2100"]
-            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
-            t = threading.Thread(target=buffer_to_light, args=(proc,))
+            t = threading.Thread(target=buffer_to_light, args=(proc, proc_started))
             t.start()
             threads.append(t)
             while not stopped:
