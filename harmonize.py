@@ -381,9 +381,9 @@ def init_video_capture():
 ######################################################
 
 ######### Now that weve defined our RGB values as bytes, we define how we pull values from the video analyzer output
-def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls W/H
+def cv2input_to_buffer(capture=None): ######### Section opens the device, sets buffer, pulls W/H
     global w,h,cap,single_light_prefix,single_light_message
-    cap = init_video_capture()
+    cap = init_video_capture() if capture is None else capture
     w  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))  # gets video width
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) # gets video height
     verbose("INFO: Video frame size (W by H): {} by {}".format(w, h)) #prints video frame size
@@ -484,9 +484,8 @@ try:
             w = int(cap_test.get(cv2.CAP_PROP_FRAME_WIDTH))  # gets video width
             try: w
             except NameError: sys.exit("Error capturing stream. Exiting application.")
-            cap_test.release()
 
-            t = threading.Thread(target=cv2input_to_buffer)
+            t = threading.Thread(target=cv2input_to_buffer, args=(cap_test,))
             t.start()
             threads.append(t)
             print("Initializing video frame grabber...")
