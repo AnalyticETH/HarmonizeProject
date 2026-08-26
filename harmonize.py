@@ -29,12 +29,33 @@ import subprocess
 import threading
 import fileinput
 import numpy as np
+from video_pipeline import (
+    LatestFrameBuffer,
+    StreamMessageCache,
+    _brightness_lut,
+    prepare_light_regions,
+    sample_bgr_region_bytes,
+    send_stream_message_on_schedule,
+)
 import cv2
 import re
 
 from pathlib import Path
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 from termcolor import colored
+_cvt_color = cv2.cvtColor
+_BGR2HSV = cv2.COLOR_BGR2HSV
+_HSV2BGR = cv2.COLOR_HSV2BGR
+_cv2_mean = cv2.mean
+_cv2_lut = cv2.LUT
+_cv2_add = cv2.add
+_LIGHT_CHANNEL_PAIRS = tuple(
+    bytes((value // 2, value // 2))
+    for value in range(256)
+)
+single_light_prefix = b""
+single_light_message = b""
+
 
 # suppress SSL certificate verification warning
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -54,6 +75,9 @@ class MyListener(ServiceListener):
         verbose("INFO: Detected %s via mDNS at IP address: %s" % (name, info.parsed_addresses()[0]))
 
 zeroconf = Zeroconf()
+frame_buffer = LatestFrameBuffer()
+frame_ready = threading.Event()
+analysis_ready = threading.Event()
 listener = MyListener()
 
 parser = argparse.ArgumentParser()
@@ -276,7 +300,6 @@ jsondata = r_v2.json()
 verbose(jsondata)
         
 ######### Prepare the messages' vessel for the RGB values we will insert
-bufferlock = threading.Lock()
 
 ######################################################
 ################# Setup Complete #####################
@@ -314,20 +337,25 @@ def averageimage():
         bds = list(map(int, bds))
         bds = list(map(lambda x: 0 if x < 0 else x, bds))
         bounds[num] = bds
+    prepared_regions = prepare_light_regions(tuple(bounds.items()))
    
-    global rgb,rgb_bytes #array of rgb values, one for each light
-    rgb = {}
+    global rgb_bytes #array of RGB values, one for each light
     rgb_bytes = {}
-    area = {}
+    last_generation = 0
 
-# Constantly sets RGB values by location via taking average of nearby pixels
+# Analyze each newly published frame at most once; superseded frames are skipped.
     while not stopped:
-        for x, bds in bounds.items():
-            area[x] = rgbframe[bds[0]:bds[1], bds[2]:bds[3], :]
-            rgb[x] = cv2.mean(area[x])
-        for x, c in rgb.items():
-            rgb_bytes[x] = bytearray([int(c[0]/2), int(c[0]/2), int(c[1]/2), int(c[1]/2), int(c[2]/2), int(c[2]/2),] )
-            
+        next_frame = frame_buffer.next_frame(last_generation)
+        if next_frame is None:
+            break
+        last_generation, frame = next_frame
+        rgb_bytes = sample_bgr_region_bytes(
+            frame,
+            prepared_regions,
+            _cv2_mean,
+        )
+        if not analysis_ready.is_set():
+            analysis_ready.set()
 ######################################################
 ############ Video Capture Setup #####################
 ######################################################
@@ -353,9 +381,9 @@ def init_video_capture():
 ######################################################
 
 ######### Now that weve defined our RGB values as bytes, we define how we pull values from the video analyzer output
-def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls W/H
-    global w,h,rgbframe, channels, cap
-    cap = init_video_capture()
+def cv2input_to_buffer(capture=None): ######### Section opens the device, sets buffer, pulls W/H
+    global w,h,cap,single_light_prefix,single_light_message
+    cap = init_video_capture() if capture is None else capture
     w  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))  # gets video width
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) # gets video height
     verbose("INFO: Video frame size (W by H): {} by {}".format(w, h)) #prints video frame size
@@ -367,10 +395,22 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
         ret, bgrframe = cap.read() # processes most recent frame
         if ret: # if frame is read properly
             if is_single_light:
-                channels = cv2.mean(bgrframe)
+                bgrframe = _adjust_brightness_inplace(
+                    bgrframe,
+                    commandlineargs.light_brightness,
+                )
+                channels = _cv2_mean(bgrframe)
+                single_light_message = (
+                    single_light_prefix
+                    + _LIGHT_CHANNEL_PAIRS[int(channels[2])]
+                    + _LIGHT_CHANNEL_PAIRS[int(channels[1])]
+                    + _LIGHT_CHANNEL_PAIRS[int(channels[0])]
+                )
             else:
-                bgrframe = adjust_brightness(bgrframe,commandlineargs.light_brightness)
-                rgbframe = cv2.cvtColor(bgrframe, cv2.COLOR_BGR2RGB) #corrects BGR to RGB
+                bgrframe = _adjust_brightness_inplace(bgrframe,commandlineargs.light_brightness)
+                frame_buffer.publish(bgrframe)
+            if not frame_ready.is_set():
+                frame_ready.set()
         else:
             print("WARNING: Unable to read frame from video stream")
             time.sleep(1)
@@ -380,15 +420,18 @@ def cv2input_to_buffer(): ######### Section opens the device, sets buffer, pulls
                     cap.open(0)
 
 def adjust_brightness(raw, value):
-    hsv = cv2.cvtColor(raw, cv2.COLOR_BGR2HSV)
-    h, s, v = cv2.split(hsv)
+    hsv = _cvt_color(raw, _BGR2HSV)
+    hsv[:, :, 2] = _cv2_lut(hsv[:, :, 2], _brightness_lut(value))
+    _cvt_color(hsv, _HSV2BGR, hsv)
+    return hsv
 
-    lim = 255 - value
-    v[v > lim] = 255
-    v[v <= lim] += value
-
-    final_hsv = cv2.merge((h, s, v))
-    raw = cv2.cvtColor(final_hsv, cv2.COLOR_HSV2BGR)
+def _adjust_brightness_inplace(raw, value):
+    _cvt_color(raw, _BGR2HSV, raw)
+    if 0 <= value <= 255:
+        raw[:, :, 2] = _cv2_add(raw[:, :, 2], value)
+    else:
+        raw[:, :, 2] = _cv2_lut(raw[:, :, 2], _brightness_lut(value))
+    _cvt_color(raw, _HSV2BGR, raw)
     return raw
 
 ######################################################
@@ -396,24 +439,30 @@ def adjust_brightness(raw, value):
 ######################################################
 
 ######### This is where we define our message format and insert our light#s, RGB values, and X,Y,Brightness ##########
-def buffer_to_light(proc): #Potentially thread this into 2 processes?
-    time.sleep(1.5) #Hold on so DTLS connection can be made & message format can get defined
-    while not stopped:
-        bufferlock.acquire()
-        
-        message = bytes('HueStream','utf-8') + b'\2\0\0\0\0\0\0' + bytes(entertainment_id,'utf-8')
+def buffer_to_light(proc, proc_started=None): #Potentially thread this into 2 processes?
+    if proc_started is None:
+        time.sleep(1.5) #Hold on so DTLS connection can be made & message format can get defined
+    else:
+        delay = proc_started + 1.5 - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
+    message_cache = StreamMessageCache(entertainment_id, tuple(lights_dict))
+    if is_single_light:
+        def current_message():
+            return single_light_message
+    else:
+        def current_message():
+            return message_cache.get(rgb_bytes)
 
-        if is_single_light:
-            single_light_bytes = bytearray([int(channels[2]/2), int(channels[2]/2), int(channels[1]/2), int(channels[1]/2), int(channels[0]/2), int(channels[0]/2),] ) # channels corrected here from BGR to RGB
-            message += bytes(chr(int(1)), 'utf-8') + single_light_bytes
-        else:
-            for i in rgb_bytes:
-                message += bytes(chr(int(i)), 'utf-8') + rgb_bytes[i]
- 
-        bufferlock.release()
-        proc.stdin.write(message.decode('utf-8','ignore'))
-        time.sleep(.0167) #0.01 to 0.02 (slightly under 100 or 50 messages per sec // or (.0167 = ~60))
-        proc.stdin.flush()
+    next_deadline = time.monotonic()
+    while not stopped:
+        next_deadline = send_stream_message_on_schedule(
+            proc,
+            current_message,
+            time.sleep,
+            next_deadline,
+            flush=False,
+        )
         #verbose('Wrote message and flushed. Briefly waiting') #This will verbose after every send, spamming the console.
 
 ######################################################
@@ -440,14 +489,25 @@ try:
             w = int(cap_test.get(cv2.CAP_PROP_FRAME_WIDTH))  # gets video width
             try: w
             except NameError: sys.exit("Error capturing stream. Exiting application.")
-            cap_test.release()
 
-            t = threading.Thread(target=cv2input_to_buffer)
+            t = threading.Thread(target=cv2input_to_buffer, args=(cap_test,))
             t.start()
             threads.append(t)
             print("Initializing video frame grabber...")
-            time.sleep(commandlineargs.video_wait_time) # wait sufficiently until rgbframe is defined
+            verbose("Opening an SSL packet stream to lights on network...")
+            cmd = ["openssl","s_client","-dtls1_2","-cipher","PSK-AES128-GCM-SHA256","-psk_identity",hue_app_id,"-psk",clientdata['clientkey'], "-connect", hueip+":2100"]
+            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
+            proc_started = time.monotonic()
+            frame_ready.wait(commandlineargs.video_wait_time)
             if (commandlineargs.single_light is True) and (len(lights_dict)==1):
+                single_light_id = next(iter(lights_dict))
+                single_light_prefix = (
+                    b"HueStream"
+                    + b'\2\0\0\0\0\0\0'
+                    + entertainment_id.encode("utf-8")
+                    + bytes((int(single_light_id),))
+                )
+                single_light_message = single_light_prefix + b"\0" * 6
                 is_single_light = True
                 print("Enabled optimization for single light source") # averager thread is not utilized
             else:
@@ -456,11 +516,8 @@ try:
                 t = threading.Thread(target=averageimage)
                 t.start()
                 threads.append(t)
-            time.sleep(0.50) # wait sufficiently until rgb_bytes is defined from above thread
-            verbose("Opening an SSL packet stream to lights on network...")
-            cmd = ["openssl","s_client","-dtls1_2","-cipher","PSK-AES128-GCM-SHA256","-psk_identity",hue_app_id,"-psk",clientdata['clientkey'], "-connect", hueip+":2100"]
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-            t = threading.Thread(target=buffer_to_light, args=(proc,))
+                analysis_ready.wait(0.50)
+            t = threading.Thread(target=buffer_to_light, args=(proc, proc_started))
             t.start()
             threads.append(t)
             while not stopped:
@@ -471,14 +528,20 @@ try:
                     cap.open(0)
                 if key_input == 'q':
                     stopped = True
+                    frame_buffer.close()
                     for t in threads:
                         t.join()
 
     except Exception as e:
         print(e)
         stopped=True
+        frame_buffer.close()
+        for t in threads:
+            t.join()
+
 
 finally: #Turn off streaming to allow normal function immedietly
+    frame_buffer.close()
     zeroconf.close()
     print("Disabling streaming on Entertainment area...")
     r = requests.put("https://{}/clip/v2/resource/entertainment_configuration/{}".format(hueip,entertainment_id), json={"action":"stop"}, verify=False, headers={"hue-application-key":clientdata['username']})
