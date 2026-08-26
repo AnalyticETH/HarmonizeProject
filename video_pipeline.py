@@ -235,7 +235,3 @@ def send_stream_message_on_schedule(
     if flush:
         stdin.flush()
     return next_deadline + interval
-
-
-
-
